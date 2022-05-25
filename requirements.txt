@@ -1,0 +1,4 @@
+python-vlc
+async-property
+python-telegram-bot>=20.0a0
+aiosqlite
