@@ -1,0 +1,13 @@
+[Unit]
+Description=Start Rpi Music Telegram Bot
+
+[Service]
+User=pi
+Group=pi
+Type=simple
+ExecReload=/usr/bin/git pull
+ExecStart=/usr/bin/python3.10 /srv/raspberry-pi-music-bot/main.py
+WorkingDirectory=/srv/raspberry-pi-music-bot
+
+[Install]
+WantedBy=network.target
