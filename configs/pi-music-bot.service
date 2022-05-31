@@ -1,5 +1,7 @@
 [Unit]
 Description=Start Rpi Music Telegram Bot
+After=sound.target network.target
+Requires=sound.target network.target
 
 [Service]
 User=pi
