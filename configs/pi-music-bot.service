@@ -5,7 +5,7 @@ Requires=sound.target network.target
 
 [Service]
 User=pi
-Group=pulse
+Group=pi
 Type=simple
 ExecReload=/usr/bin/git pull
 ExecStart=/usr/bin/python3.10 /srv/raspberry-pi-music-bot/main.py
