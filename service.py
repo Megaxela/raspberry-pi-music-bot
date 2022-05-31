@@ -2,7 +2,7 @@ import asyncio
 import typing as tp
 import logging
 
-from tg.bot import TelegramBot
+from tg_bot.bot import TelegramBot
 from multimedia.player import Player, PlayerState
 from multimedia.media import Media
 from multimedia.playlist import Playlist
