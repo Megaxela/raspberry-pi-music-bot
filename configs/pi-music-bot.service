@@ -3,7 +3,7 @@ Description=Start Rpi Music Telegram Bot
 
 [Service]
 User=pi
-Group=pi
+Group=audio
 Type=simple
 ExecReload=/usr/bin/git pull
 ExecStart=/usr/bin/python3.10 /srv/raspberry-pi-music-bot/main.py

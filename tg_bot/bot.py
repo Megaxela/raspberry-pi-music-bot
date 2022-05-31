@@ -42,6 +42,8 @@ CurrentPlayerStateCallback = tp.Callable[[], PlayerState]
 PauseCallback = tp.Callable[[], None]
 ResumeCallback = tp.Callable[[], None]
 SkipCallback = tp.Callable[[], None]
+GetVolumeCallback = tp.Callable[[], int]
+SetVolumeCallback = tp.Callable[[int], None]
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ class TelegramBot:
         self._application.add_handler(CommandHandler("info", self.on_info_command))
         self._application.add_handler(CommandHandler("playlist", self.on_info_command))
         self._application.add_handler(CommandHandler("skip", self.on_skip_command))
+        self._application.add_handler(CommandHandler("volume", self.on_volume_command))
         self._application.add_handler(
             MessageHandler(filters.Regex(r"^\\o$"), self.on_hi)
         )
@@ -66,6 +69,8 @@ class TelegramBot:
         self._pause_cb: tp.Optional[PauseCallback] = None
         self._resume_cb: tp.Optional[ResumeCallback] = None
         self._skip_cb: tp.Optional[SkipCallback] = None
+        self._get_volume_cb: tp.Optional[GetVolumeCallback] = None
+        self._set_volume_cb: tp.Optional[SetVolumeCallback] = None
 
     async def run(self):
         def error_callback(exc) -> None:
@@ -94,6 +99,20 @@ class TelegramBot:
             await update.message.reply_text("\\o")
         except Exception:
             logger.error("Unable to perform skip command.", exc_info=True)
+            await self._exception_notify(update)
+
+    async def on_volume_command(
+        self, update: Update, context: CallbackContext.DEFAULT_TYPE
+    ):
+        try:
+            if self._skip_cb is None:
+                await self._error_notify(update, f"{self._skip_cb=}")
+
+            await self._skip_cb()
+
+            await update.message.reply_text(MESSAGE_SKIP_SUCCESS)
+        except Exception:
+            logger.error("Unable to perform volume command.", exc_info=True)
             await self._exception_notify(update)
 
     async def on_skip_command(
@@ -163,7 +182,7 @@ class TelegramBot:
                 await self._error_notify(update, f"{self._add_to_playlist_cb=}")
                 return
 
-            url = update.message.text[2:].strip()
+            url = context.args[0]
 
             # If no url specified - trying to control player
             if not url:
@@ -265,3 +284,19 @@ class TelegramBot:
     @skip_cb.setter
     def skip_cb(self, v: SkipCallback):
         self._skip_cb = v
+
+    @property
+    def get_volume_cb(self) -> tp.Optional[GetVolumeCallback]:
+        return self._get_volume_cb
+
+    @get_volume_cb.setter
+    def get_volume_cb(self, v: GetVolumeCallback):
+        self._get_volume_cb = v
+
+    @property
+    def set_volume_cb(self) -> tp.Optional[SetVolumeCallback]:
+        return self._set_volume_cb
+
+    @set_volume_cb.setter
+    def set_volume_cb(self, v: SetVolumeCallback):
+        self._set_volume_cb = v
