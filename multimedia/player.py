@@ -32,8 +32,10 @@ class Player:
     def __init__(self):
         self._player: vlc.MediaPlayer = vlc.MediaPlayer()
         self._current_media: tp.Optional[Media] = None
+        self._volume = 100
 
         # Setting up player object
+        self._player.audio_set_volume(self._volume)
         loop = asyncio.get_event_loop()
 
         ev: vlc.EventManager = self._player.event_manager()
@@ -88,11 +90,24 @@ class Player:
 
     @property
     def volume(self):
-        return self._player.audio_get_volume()
+        return self._volume
 
     @volume.setter
     def volume(self, new_val):
+        self._volume = new_val
         self._player.audio_set_volume(new_val)
+
+    @property
+    def cursor(self):
+        return int(self._player.get_time() / 1000)
+
+    @cursor.setter
+    def cursor(self, new_val: int):
+        self._player.set_time(int(new_val * 1000))
+
+    @property
+    def length(self):
+        return int(self._player.get_length() / 1000)
 
     @property
     def current_media(self) -> tp.Optional[Media]:

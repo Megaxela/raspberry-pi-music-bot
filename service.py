@@ -10,11 +10,18 @@ from multimedia.playlist import Playlist
 logger = logging.getLogger(__name__)
 
 
-def prop(obj, prop):
+def propg(obj, prop):
     def getter():
         return getattr(obj, prop)
 
     return getter
+
+
+def props(obj, prop):
+    def setter(v):
+        setattr(obj, prop, v)
+
+    return setter
 
 
 class Service:
@@ -25,12 +32,19 @@ class Service:
 
         # Setting up bot
         self._bot.add_to_playlist_cb = self._on_add_content
-        self._bot.list_playlist_cb = prop(self._playlist, "items")
-        self._bot.current_media_cb = prop(self._player, "current_media")
-        self._bot.current_player_state_cb = prop(self._player, "state")
+        self._bot.list_playlist_cb = propg(self._playlist, "items")
+        self._bot.current_media_cb = propg(self._player, "current_media")
+        self._bot.current_player_state_cb = propg(self._player, "state")
         self._bot.pause_cb = self._player.pause
         self._bot.resume_cb = self._player.resume
         self._bot.skip_cb = self.play_next
+        self._bot.get_seek_cb = propg(self._player, "cursor")
+        self._bot.set_seek_cb = props(self._player, "cursor")
+        self._bot.get_volume_cb = propg(self._player, "volume")
+        self._bot.set_volume_cb = props(self._player, "volume")
+        self._bot.get_cursor_cb = propg(self._player, "cursor")
+        self._bot.set_cursor_cb = props(self._player, "cursor")
+        self._bot.get_length_cb = propg(self._player, "length")
 
     async def run(self):
         # Running bot coro
