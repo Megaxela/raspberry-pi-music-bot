@@ -2,13 +2,21 @@ import typing as tp
 import logging
 import sys
 import traceback
+import json
 
 from multimedia.media import Media
 from multimedia.player import PlayerState
+from database import Database
 
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
-from telegram import ForceReply, Update
+from telegram import (
+    CallbackQuery,
+    ForceReply,
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from telegram._utils.defaultvalue import DEFAULT_NONE
 from telegram.ext import (
     Application,
@@ -16,12 +24,17 @@ from telegram.ext import (
     MessageHandler,
     filters,
     CallbackContext,
+    CallbackQueryHandler,
 )
 
+MESSAGE_REPLY_TEMPLATE = "⚙️ {}: {}"
 MESSAGE_SMALL_INTERNAL_ERROR = "😔 Что-то случилось и я теперь не могу работать."
 MESSAGE_BIG_INTERNAL_ERROR = "😡🔧 Кое что случилось. Ошибку смотри ниже:\n```\n{}\n```"
 MESSAGE_MEDIA_ADDED = "🎶 Добавили {} шт.:\n{}"
-MESSAGE_MEDIA_ADDING = "🤔 Добавляю `{}`"
+MESSAGE_MEDIA_READDED = "🎶 Передобавили {} шт.:\n{}"
+MESSAGE_MEDIA_ADDING = "🤔 Добавляю:\n{}"
+MESSAGE_MEDIA_READDING = "🤔 Передобавляю:\n{}"
+MESSAGE_MEDIA_READDING_FAIL = "😔 Похоже, что это сообщение не может быть передобавлено."
 MESSAGE_LIST_PLAYLIST = """🎶 {}
 
 Треков в плейлисте {} шт.:
@@ -29,7 +42,9 @@ MESSAGE_LIST_PLAYLIST = """🎶 {}
 MESSAGE_UNABLE_TO_PLAY_EMPTY = (
     "⚠️ Невозможно поставить на паузу или продолжить. Плеер ничего не играет."
 )
+MESSAGE_SKIPPING = "🤔 Пытаемся пропустить..."
 MESSAGE_SKIP_SUCCESS = "💩 Трек был пропущен."
+MESSAGE_SKIP_FAIL = "🤔 Нечего пропускать."
 
 MESSAGE_PAUSE_SUCCESS = "⏸️ Музыка успешно поставлена на паузу"
 MESSAGE_RESUME_SUCCESS = "▶️ Музыка успешно продолжена"
@@ -39,6 +54,12 @@ MESSAGE_PLAYER_STOPPED = "Сейчас ничего не играет."
 MESSAGE_PLAYER_SEEK_STATUS = "Текущая позиция: `{}/{}`"
 
 MESSAGE_VOLUME_STATUS = "Текущая громкость: `{}/100`"
+
+MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
+
+KEYBOARD_BUTTON_REPEAT = "Повторить"
+KEYBOARD_BUTTON_VOLUME_ADD = "+10"
+KEYBOARD_BUTTON_VOLUME_SUB = "-10"
 
 AddToPlaylistCallback = tp.Callable[[str], tp.Awaitable[tp.List[Media]]]
 ListPlaylistCallback = tp.Callable[[], tp.List[Media]]
@@ -59,15 +80,19 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    def __init__(self, token: str):
+    def __init__(self, token: str, database: Database):
         self._debug_mode = True
 
+        self._database: Database = database
+
         self._application = Application.builder().token(token).build()
+        self._application.add_handler(CallbackQueryHandler(self._callback_handler))
         self._application.add_handler(CommandHandler("p", self.on_play_command))
         self._application.add_handler(CommandHandler("info", self.on_info_command))
         self._application.add_handler(CommandHandler("playlist", self.on_info_command))
         self._application.add_handler(CommandHandler("skip", self.on_skip_command))
         self._application.add_handler(CommandHandler("volume", self.on_volume_command))
+        self._application.add_handler(CommandHandler("v", self.on_volume_command))
         self._application.add_handler(CommandHandler("seek", self.on_seek_command))
         self._application.add_handler(
             MessageHandler(filters.Regex(r"^\\o$"), self.on_hi)
@@ -110,12 +135,16 @@ class TelegramBot:
         )
         await self._application.start()
 
+    async def notify_currently_playing(self, media: Media):
+        await self._notify(MESSAGE_NOTIFY_AUTOPLAY.format(await media.media_title))
+
     async def on_hi(
         self,
         update: Update,
         context: CallbackContext.DEFAULT_TYPE,
     ):
         try:
+            # Do not use self._reply here, cause it may delete initial message.
             await update.message.reply_text("\\o")
         except Exception:
             logger.error("Unable to perform skip command.", exc_info=True)
@@ -215,7 +244,28 @@ class TelegramBot:
 
             # Print current volume
             volume = self._get_volume_cb()
-            await self._reply(update, MESSAGE_VOLUME_STATUS.format(volume))
+            await self._reply(
+                update,
+                MESSAGE_VOLUME_STATUS.format(volume),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                KEYBOARD_BUTTON_VOLUME_SUB,
+                                callback_data=json.dumps(
+                                    {"type": "volume", "value": -10}
+                                ),
+                            ),
+                            InlineKeyboardButton(
+                                KEYBOARD_BUTTON_VOLUME_ADD,
+                                callback_data=json.dumps(
+                                    {"type": "volume", "value": 10}
+                                ),
+                            ),
+                        ],
+                    ]
+                ),
+            )
         except Exception:
             logger.error("Unable to perform volume command.", exc_info=True)
             await self._exception_notify(update)
@@ -227,9 +277,18 @@ class TelegramBot:
             if self._skip_cb is None:
                 await self._error_notify(update, f"{self._skip_cb=}")
 
-            await self._skip_cb()
+            message = await self._reply(update, MESSAGE_SKIPPING)
+            if await self._skip_cb():
+                await message.edit_text(
+                    MESSAGE_SKIP_SUCCESS,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            else:
+                await message.edit_text(
+                    MESSAGE_SKIP_FAIL,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
 
-            await self._reply(update, MESSAGE_SKIP_SUCCESS)
         except Exception:
             logger.error("Unable to perform skip command.", exc_info=True)
             await self._exception_notify(update)
@@ -291,12 +350,8 @@ class TelegramBot:
                 await self._error_notify(update, f"{self._add_to_playlist_cb=}")
                 return
 
-            url = None
-            if context.args:
-                url = context.args[0]
-
             # If no url specified - trying to control player
-            if not url:
+            if not context.args:
                 state = self._current_player_state_cb()
                 if state == PlayerState.Paused:
                     await self._resume_cb()
@@ -307,27 +362,67 @@ class TelegramBot:
                 elif state == PlayerState.Stopped:
                     await self._reply(update, MESSAGE_UNABLE_TO_PLAY_EMPTY)
                 return
-            status_message = await self._reply(update, MESSAGE_MEDIA_ADDING.format(url))
 
-            medias = await self._add_to_playlist_cb(url)
-
-            await status_message.edit_text(
-                MESSAGE_MEDIA_ADDED.format(
-                    len(medias),
-                    "\n".join([f"- `{await media.media_title}`" for media in medias]),
-                ),
-                parse_mode=ParseMode.MARKDOWN,
-            )
+            await self._add_medias(update, context.args)
 
         except Exception:
             logger.error("Unable to perform play command.", exc_info=True)
             await self._exception_notify(update)
 
+    async def _add_medias(self, update: Update, uris: tp.List[str]):
+        # Notifying people, that we are trying our best
+        status_message = await self._reply(
+            update,
+            MESSAGE_MEDIA_ADDING.format("\n".join(f"- `{url}`" for url in uris)),
+        )
+
+        # Saving request to database.
+        play_message_id = await self._database.add_play_message(uris)
+
+        # Trying to fetch medias from playlist
+        medias: tp.List[tp.Tuple[str, Media]] = []
+        for url in uris:
+            new_medias = await self._add_to_playlist_cb(url)
+            medias += [(url, media) for media in new_medias]
+
+        # Notifying people, that we was successfull about it.
+        await status_message.edit_text(
+            MESSAGE_REPLY_TEMPLATE.format(
+                update.message.from_user.name,
+                MESSAGE_MEDIA_ADDED.format(
+                    len(medias),
+                    "\n".join(
+                        [
+                            f"- [{await media.media_title}]({url})"
+                            for url, media in medias
+                        ]
+                    ),
+                ),
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            KEYBOARD_BUTTON_REPEAT,
+                            callback_data=json.dumps(
+                                {
+                                    "type": "replay",
+                                    "play_message_id": play_message_id,
+                                }
+                            ),
+                        )
+                    ],
+                ]
+            ),
+        )
+
     async def _exception_notify(self, update: Update):
         if self._debug_mode:
-            await self._reply(
-                update,
-                MESSAGE_BIG_INTERNAL_ERROR.format(traceback.format_exc()),
+            await self._application.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=MESSAGE_BIG_INTERNAL_ERROR.format(traceback.format_exc()),
+                parse_mode=ParseMode.MARKDOWN,
             )
         else:
             await update.message.reply_text(MESSAGE_SMALL_INTERNAL_ERROR)
@@ -341,10 +436,152 @@ class TelegramBot:
         else:
             await self._reply(update, MESSAGE_SMALL_INTERNAL_ERROR)
 
-    async def _reply(self, update: Update, txt: str):
-        return await update.message.reply_text(
-            txt,
+    async def _notify(self, text):
+        for chat_id in self._application.chat_data:
+            try:
+                await self._application.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception:
+                logger.error("Unable to notify %s chat", str(chat_id))
+
+    async def _reply(self, update: Update, txt: str, reply_markup=None):
+        chat_id = update.effective_chat.id
+        from_user = update.message.from_user
+        await update.message.delete()
+        return await self._application.bot.send_message(
+            chat_id=chat_id,
+            text=MESSAGE_REPLY_TEMPLATE.format(from_user.name, txt),
             parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup,
+        )
+
+    async def _reply_cb(self, query: CallbackQuery, txt: str):
+        return await query.message.reply_text(
+            text=txt,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    async def _callback_handler(
+        self,
+        update: Update,
+        context: CallbackContext.DEFAULT_TYPE,
+    ):
+        processors = {
+            "replay": self._callback_replay,
+            "volume": self._callback_volume,
+        }
+
+        try:
+            query = update.callback_query
+
+            await query.answer()
+
+            data = json.loads(query.data)
+
+            await processors[data["type"]](update, query, data)
+        except Exception:
+            logger.error("Unable to perform callback.", exc_info=True)
+            await self._exception_notify(update)
+
+    async def _callback_volume(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        value = data["value"]
+
+        old_volume = self._get_volume_cb()
+        new_volume = sorted((0, old_volume + value, 100))[1]
+        self._set_volume_cb(new_volume)
+
+        # We do not want to receive exception,
+        # that message was not changed.
+        if old_volume == new_volume:
+            return
+
+        current_volume = self._get_volume_cb()
+
+        await query.message.edit_text(
+            text=MESSAGE_REPLY_TEMPLATE.format(
+                query.from_user.name,
+                MESSAGE_VOLUME_STATUS.format(current_volume),
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            KEYBOARD_BUTTON_VOLUME_SUB,
+                            callback_data=json.dumps({"type": "volume", "value": -10}),
+                        ),
+                        InlineKeyboardButton(
+                            KEYBOARD_BUTTON_VOLUME_ADD,
+                            callback_data=json.dumps({"type": "volume", "value": 10}),
+                        ),
+                    ],
+                ]
+            ),
+        )
+
+    async def _callback_replay(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        message_id = data["play_message_id"]
+        uris = await self._database.fetch_uris_from_play_message(message_id)
+
+        if not uris:
+            await self._reply_cb(query, MESSAGE_MEDIA_READDING_FAIL)
+            return
+
+        # Notifying people, that we are trying our best
+        status_message = await self._reply_cb(
+            query,
+            MESSAGE_MEDIA_READDING.format("\n".join(f"- `{url}`" for url in uris)),
+        )
+
+        # Trying to fetch medias from playlist
+        medias: tp.List[tp.Tuple[str, Media]] = []
+        for url in uris:
+            new_medias = await self._add_to_playlist_cb(url)
+            medias += [(url, media) for media in new_medias]
+
+        # Notifying people, that we was successfull about it.
+        await status_message.edit_text(
+            MESSAGE_REPLY_TEMPLATE.format(
+                query.from_user.name,
+                MESSAGE_MEDIA_READDED.format(
+                    len(medias),
+                    "\n".join(
+                        [
+                            f"- [{await media.media_title}]({url})"
+                            for url, media in medias
+                        ]
+                    ),
+                ),
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            KEYBOARD_BUTTON_REPEAT,
+                            callback_data=json.dumps(
+                                {
+                                    "type": "replay",
+                                    "play_message_id": message_id,
+                                }
+                            ),
+                        )
+                    ],
+                ]
+            ),
         )
 
     @staticmethod

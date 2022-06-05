@@ -20,6 +20,7 @@ async def main():
     try:
         service = Service(
             telegram_bot_token=os.getenv("TG_BOT_TOKEN"),
+            database_path="db.sqlite3",
         )
 
         await service.run()

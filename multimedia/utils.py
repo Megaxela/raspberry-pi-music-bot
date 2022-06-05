@@ -19,11 +19,13 @@ def vlc_flags_or(*args):
 def wrap_vlc_event(ev: vlc.EventType, event: vlc.Event):
     loop = asyncio.get_event_loop()
     f = loop.create_future()
+
+    def cb():
+        f.set_result(None)
+        ev.event_detach(event)
+
     ev.event_attach(
         event,
-        lambda event: loop.call_soon_threadsafe(
-            f.set_result,
-            None,
-        ),
+        lambda event: loop.call_soon_threadsafe(cb),
     )
     return f

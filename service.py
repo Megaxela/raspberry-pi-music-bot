@@ -6,6 +6,7 @@ from tg_bot.bot import TelegramBot
 from multimedia.player import Player, PlayerState
 from multimedia.media import Media
 from multimedia.playlist import Playlist
+from database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,12 @@ def props(obj, prop):
 
 
 class Service:
-    def __init__(self, telegram_bot_token: str):
-        self._bot = TelegramBot(telegram_bot_token)
+    def __init__(self, telegram_bot_token: str, database_path: str):
+        self._database = Database(database_path)
+        self._bot = TelegramBot(
+            telegram_bot_token,
+            self._database,
+        )
         self._playlist = Playlist()
         self._player = Player()
 
@@ -47,6 +52,9 @@ class Service:
         self._bot.get_length_cb = propg(self._player, "length")
 
     async def run(self):
+        # Initializing database
+        await self._database.initialize()
+
         # Running bot coro
         await self._bot.run()
 
@@ -62,10 +70,11 @@ class Service:
 
         return content
 
-    async def play_next(self):
+    async def play_next(self) -> bool:
         if not self._playlist.items:
+            result = self._player.state in (PlayerState.Playing, PlayerState.Paused)
             await self._player.stop()
-            return
+            return result
 
         last_media = self._playlist.last
         self._playlist.pop_last()
@@ -76,10 +85,13 @@ class Service:
             len(self._playlist.items),
         )
 
+        await self._bot.notify_currently_playing(last_media)
+
         if self._player.state in (PlayerState.Playing, PlayerState.Paused):
             await self._player.stop()
 
         await self._player.play(last_media)
+        return True
 
     async def autoplay(self):
         while True:
