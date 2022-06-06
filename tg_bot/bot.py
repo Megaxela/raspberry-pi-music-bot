@@ -388,7 +388,7 @@ class TelegramBot:
         # Notifying people, that we was successfull about it.
         await status_message.edit_text(
             MESSAGE_REPLY_TEMPLATE.format(
-                update.message.from_user.name,
+                escape_markdown(update.message.from_user.name),
                 MESSAGE_MEDIA_ADDED.format(
                     len(medias),
                     "\n".join(
@@ -453,7 +453,7 @@ class TelegramBot:
         await update.message.delete()
         return await self._application.bot.send_message(
             chat_id=chat_id,
-            text=MESSAGE_REPLY_TEMPLATE.format(from_user.name, txt),
+            text=MESSAGE_REPLY_TEMPLATE.format(escape_markdown(from_user.name), txt),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=reply_markup,
         )
@@ -507,7 +507,7 @@ class TelegramBot:
 
         await query.message.edit_text(
             text=MESSAGE_REPLY_TEMPLATE.format(
-                query.from_user.name,
+                escape_markdown(query.from_user.name),
                 MESSAGE_VOLUME_STATUS.format(current_volume),
             ),
             parse_mode=ParseMode.MARKDOWN,
@@ -555,7 +555,7 @@ class TelegramBot:
         # Notifying people, that we was successfull about it.
         await status_message.edit_text(
             MESSAGE_REPLY_TEMPLATE.format(
-                query.from_user.name,
+                escape_markdown(query.from_user.name),
                 MESSAGE_MEDIA_READDED.format(
                     len(medias),
                     "\n".join(

@@ -4,6 +4,8 @@ After=sound.target network.target
 Requires=sound.target network.target
 
 [Service]
+Restart=always
+RestartSec=3
 User=pulse
 Group=pulse
 Type=simple
