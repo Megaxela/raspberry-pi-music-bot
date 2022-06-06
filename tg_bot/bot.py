@@ -3,6 +3,7 @@ import logging
 import sys
 import traceback
 import json
+import asyncio
 
 from multimedia.media import Media
 from multimedia.player import PlayerState
@@ -57,9 +58,16 @@ MESSAGE_VOLUME_STATUS = "Текущая громкость: `{}/100`"
 
 MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
 
+KEYBOARD_BUTTON_EMPTY = "❌"
 KEYBOARD_BUTTON_REPEAT = "Повторить"
 KEYBOARD_BUTTON_VOLUME_ADD = "+10"
 KEYBOARD_BUTTON_VOLUME_SUB = "-10"
+KEYBOARD_BUTTON_PAUSE = "⏸️"
+KEYBOARD_BUTTON_RESUME = "▶️"
+KEYBOARD_BUTTON_SKIP = "⏭️"
+KEYBOARD_BUTTON_FF = "⏩"
+KEYBOARD_BUTTON_FR = "⏪"
+
 
 AddToPlaylistCallback = tp.Callable[[str], tp.Awaitable[tp.List[Media]]]
 ListPlaylistCallback = tp.Callable[[], tp.List[Media]]
@@ -84,6 +92,7 @@ class TelegramBot:
         self._debug_mode = True
 
         self._database: Database = database
+        self._info_messages: tp.Dict[tp.Union[int, str], tp.Union[int, str]] = {}
 
         self._application = Application.builder().token(token).build()
         self._application.add_handler(CallbackQueryHandler(self._callback_handler))
@@ -311,17 +320,80 @@ class TelegramBot:
 
             medias = self._list_playlist_cb()
 
-            await self._reply(
+            self._info_messages[update.effective_chat] = await self._reply(
                 update,
                 MESSAGE_LIST_PLAYLIST.format(
                     await self._player_status_fmt(),
                     len(medias),
                     "\n".join([f" - `{await media.media_title}`" for media in medias]),
                 ),
+                reply_markup=self.generate_info_buttons(),
             )
         except Exception:
             logger.error("Unable to perform info/playlist command.", exc_info=True)
             await self._exception_notify(update)
+
+    async def _update_info_messages(self):
+        medias = self._list_playlist_cb()
+        status = await self._player_status_fmt()
+
+        await asyncio.gather(
+            *[
+                self._application.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=MESSAGE_LIST_PLAYLIST.format(
+                        status,
+                        len(medias),
+                        "\n".join(
+                            [f" - `{await media.media_title}`" for media in medias]
+                        ),
+                    ),
+                    reply_markup=self.generate_info_buttons(),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                for chat_id, message_id in self._info_messages.items()
+            ]
+        )
+
+    def generate_info_buttons(self):
+        state = self._current_player_state_cb()
+
+        resume_pause_button = None
+        if state == PlayerState.Playing:
+            resume_pause_button = (
+                InlineKeyboardButton(
+                    KEYBOARD_BUTTON_PAUSE,
+                    callback_data=json.dumps({"type": "pause"}),
+                ),
+            )
+        elif state == PlayerState.Paused:
+            resume_pause_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_RESUME,
+                callback_data=json.dumps({"type": "resume"}),
+            )
+        elif state == PlayerState.Stopped:
+            resume_pause_button = InlineKeyboardButton(KEYBOARD_BUTTON_EMPTY)
+
+        return InlineKeyboardMarkup(
+            [
+                [
+                    resume_pause_button,
+                    InlineKeyboardButton(
+                        KEYBOARD_BUTTON_SKIP,
+                        callback_data=json.dumps({"type": "skip"}),
+                    ),
+                    InlineKeyboardButton(
+                        KEYBOARD_BUTTON_FR,
+                        callback_data=json.dumps({"type": "seek", "data": 10}),
+                    ),
+                    InlineKeyboardButton(
+                        KEYBOARD_BUTTON_FF,
+                        callback_data=json.dumps({"type": "seek", "data": -10}),
+                    ),
+                ],
+            ]
+        )
 
     async def _player_status_fmt(self):
         state = self._current_player_state_cb()
@@ -393,7 +465,7 @@ class TelegramBot:
                     len(medias),
                     "\n".join(
                         [
-                            f"- [{await media.media_title}]({url})"
+                            f"- [{escape_markdown(await media.media_title)}]({url})"
                             for url, media in medias
                         ]
                     ),
@@ -560,7 +632,7 @@ class TelegramBot:
                     len(medias),
                     "\n".join(
                         [
-                            f"- [{await media.media_title}]({url})"
+                            f"- [{escape_markdown(await media.media_title)}]({url})"
                             for url, media in medias
                         ]
                     ),
