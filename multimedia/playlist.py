@@ -1,5 +1,6 @@
 import typing as tp
 import logging
+import asyncio
 
 from multimedia.media import Media
 

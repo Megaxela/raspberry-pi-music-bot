@@ -4,6 +4,7 @@ import sys
 import traceback
 import json
 import asyncio
+import datetime
 
 from multimedia.media import Media
 from multimedia.player import PlayerState
@@ -12,6 +13,8 @@ from database import Database
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 from telegram import (
+    User,
+    Message,
     CallbackQuery,
     ForceReply,
     Update,
@@ -29,29 +32,31 @@ from telegram.ext import (
 )
 
 MESSAGE_REPLY_TEMPLATE = "⚙️ {}: {}"
-MESSAGE_SMALL_INTERNAL_ERROR = "😔 Что-то случилось и я теперь не могу работать."
-MESSAGE_BIG_INTERNAL_ERROR = "😡🔧 Кое что случилось. Ошибку смотри ниже:\n```\n{}\n```"
-MESSAGE_MEDIA_ADDED = "🎶 Добавили {} шт.:\n{}"
-MESSAGE_MEDIA_READDED = "🎶 Передобавили {} шт.:\n{}"
+MESSAGE_SMALL_INTERNAL_ERROR = "😔 Что-то случилось и я теперь не могу работать\\."
+MESSAGE_BIG_INTERNAL_ERROR = "😡🔧 Кое что случилось\\. Ошибку смотри ниже:\n```\n{}\n```"
+MESSAGE_MEDIA_ADDED = "🎶 Добавили {} шт\\.:\n{}"
+MESSAGE_MEDIA_READDED = "🎶 Передобавили {} шт\\.:\n{}"
 MESSAGE_MEDIA_ADDING = "🤔 Добавляю:\n{}"
 MESSAGE_MEDIA_READDING = "🤔 Передобавляю:\n{}"
-MESSAGE_MEDIA_READDING_FAIL = "😔 Похоже, что это сообщение не может быть передобавлено."
+MESSAGE_MEDIA_READDING_FAIL = (
+    "😔 Похоже, что это сообщение не может быть передобавлено\\."
+)
 MESSAGE_LIST_PLAYLIST = """🎶 {}
 
-Треков в плейлисте {} шт.:
+Треков в плейлисте {} шт\\.:
 {}"""
 MESSAGE_UNABLE_TO_PLAY_EMPTY = (
-    "⚠️ Невозможно поставить на паузу или продолжить. Плеер ничего не играет."
+    "⚠️ Невозможно поставить на паузу или продолжить\\. Плеер ничего не играет\\."
 )
 MESSAGE_SKIPPING = "🤔 Пытаемся пропустить..."
-MESSAGE_SKIP_SUCCESS = "💩 Трек был пропущен."
-MESSAGE_SKIP_FAIL = "🤔 Нечего пропускать."
+MESSAGE_SKIP_SUCCESS = "💩 Трек был пропущен\\."
+MESSAGE_SKIP_FAIL = "🤔 Нечего пропускать\\."
 
 MESSAGE_PAUSE_SUCCESS = "⏸️ Музыка успешно поставлена на паузу"
 MESSAGE_RESUME_SUCCESS = "▶️ Музыка успешно продолжена"
 MESSAGE_PLAYER_PLAYING = "Сейчас играет:\n`{}`\n`{}/{}`"
 MESSAGE_PLAYER_PAUSED = "Сейчас пауза:\n`{}`\n`{}/{}`"
-MESSAGE_PLAYER_STOPPED = "Сейчас ничего не играет."
+MESSAGE_PLAYER_STOPPED = "Сейчас ничего не играет\\."
 MESSAGE_PLAYER_SEEK_STATUS = "Текущая позиция: `{}/{}`"
 
 MESSAGE_VOLUME_STATUS = "Текущая громкость: `{}/100`"
@@ -92,7 +97,8 @@ class TelegramBot:
         self._debug_mode = True
 
         self._database: Database = database
-        self._info_messages: tp.Dict[tp.Union[int, str], tp.Union[int, str]] = {}
+        self._info_messages: tp.Dict[tp.Union[int, str], tp.Tuple[Message, User]] = {}
+        self._last_update = datetime.datetime.now()
 
         self._application = Application.builder().token(token).build()
         self._application.add_handler(CallbackQueryHandler(self._callback_handler))
@@ -143,6 +149,9 @@ class TelegramBot:
             error_callback=error_callback,  # if there is an error in fetching updates
         )
         await self._application.start()
+
+        # Running coroutine for info messages updates
+        asyncio.create_task(self._auto_update_info_messages())
 
     async def notify_currently_playing(self, media: Media):
         await self._notify(MESSAGE_NOTIFY_AUTOPLAY.format(await media.media_title))
@@ -290,12 +299,12 @@ class TelegramBot:
             if await self._skip_cb():
                 await message.edit_text(
                     MESSAGE_SKIP_SUCCESS,
-                    parse_mode=ParseMode.MARKDOWN,
+                    parse_mode=ParseMode.MARKDOWN_V2,
                 )
             else:
                 await message.edit_text(
                     MESSAGE_SKIP_FAIL,
-                    parse_mode=ParseMode.MARKDOWN,
+                    parse_mode=ParseMode.MARKDOWN_V2,
                 )
 
         except Exception:
@@ -320,52 +329,120 @@ class TelegramBot:
 
             medias = self._list_playlist_cb()
 
-            self._info_messages[update.effective_chat] = await self._reply(
-                update,
-                MESSAGE_LIST_PLAYLIST.format(
-                    await self._player_status_fmt(),
-                    len(medias),
-                    "\n".join([f" - `{await media.media_title}`" for media in medias]),
+            self._info_messages[update.effective_chat.id] = (
+                await self._reply(
+                    update,
+                    MESSAGE_LIST_PLAYLIST.format(
+                        await self._player_status_fmt(),
+                        len(medias),
+                        "\n".join(
+                            [
+                                f"\\- `{escape_markdown(await media.media_title, 2)}`"
+                                for media in medias
+                            ]
+                        ),
+                    ),
+                    reply_markup=self.generate_info_buttons(),
                 ),
-                reply_markup=self.generate_info_buttons(),
+                update.message.from_user,
             )
         except Exception:
             logger.error("Unable to perform info/playlist command.", exc_info=True)
             await self._exception_notify(update)
 
+    async def _auto_update_info_messages(self):
+        update_interval = datetime.timedelta(seconds=5)
+        while True:
+            sleep_amount = (
+                update_interval - (datetime.datetime.now() - self._last_update)
+            ).seconds + 1
+
+            logger.info("Waiting until next info update for %d seconds", sleep_amount)
+            await asyncio.sleep(sleep_amount)
+
+            if datetime.datetime.now() < (self._last_update + update_interval):
+                logger.info("Trying to autoupdate too early, waiting again.")
+                continue
+
+            await self._update_info_messages()
+
     async def _update_info_messages(self):
+        self._last_update = datetime.datetime.now()
         medias = self._list_playlist_cb()
+        titles = "\n".join([f"\\- `{await media.media_title}`" for media in medias])
         status = await self._player_status_fmt()
+
+        text = MESSAGE_LIST_PLAYLIST.format(
+            status,
+            len(medias),
+            titles,
+        )
 
         await asyncio.gather(
             *[
-                self._application.bot.edit_message_text(
+                self._update_info_message(
                     chat_id=chat_id,
-                    message_id=message_id,
-                    text=MESSAGE_LIST_PLAYLIST.format(
-                        status,
-                        len(medias),
-                        "\n".join(
-                            [f" - `{await media.media_title}`" for media in medias]
-                        ),
-                    ),
-                    reply_markup=self.generate_info_buttons(),
-                    parse_mode=ParseMode.MARKDOWN,
+                    message=message_user_tuple[0],
+                    user_from=message_user_tuple[1],
+                    text=text,
                 )
-                for chat_id, message_id in self._info_messages.items()
+                for chat_id, message_user_tuple in self._info_messages.items()
             ]
         )
 
+    async def _update_info_message(
+        self,
+        chat_id: tp.Union[str, int],
+        message: Message,
+        user_from: User,
+        text: str,
+    ):
+        real_text = MESSAGE_REPLY_TEMPLATE.format(
+            escape_markdown(user_from.name, 2),
+            text,
+        )
+
+        logger.info(
+            "%s",
+            str(
+                (
+                    message.reply_markup == self.generate_info_buttons(),
+                    message.text.strip() == real_text.strip(),
+                )
+            ),
+        )
+
+        if all(
+            (
+                message.reply_markup == self.generate_info_buttons(),
+                message.text.strip() == real_text.strip(),
+            )
+        ):
+            return
+
+        try:
+            self._info_messages[chat_id] = (
+                await self._application.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message.message_id,
+                    text=real_text,
+                    reply_markup=self.generate_info_buttons(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                ),
+                user_from,
+            )
+        except:
+            logger.error("Exception acquired:", exc_info=True)
+
     def generate_info_buttons(self):
         state = self._current_player_state_cb()
+        medias = self._current_media_cb()
 
         resume_pause_button = None
         if state == PlayerState.Playing:
-            resume_pause_button = (
-                InlineKeyboardButton(
-                    KEYBOARD_BUTTON_PAUSE,
-                    callback_data=json.dumps({"type": "pause"}),
-                ),
+            resume_pause_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_PAUSE,
+                callback_data=json.dumps({"type": "pause"}),
             )
         elif state == PlayerState.Paused:
             resume_pause_button = InlineKeyboardButton(
@@ -373,23 +450,33 @@ class TelegramBot:
                 callback_data=json.dumps({"type": "resume"}),
             )
         elif state == PlayerState.Stopped:
-            resume_pause_button = InlineKeyboardButton(KEYBOARD_BUTTON_EMPTY)
+            resume_pause_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_EMPTY,
+                callback_data=json.dumps({"type": "none"}),
+            )
+
+        skip_button = InlineKeyboardButton(
+            KEYBOARD_BUTTON_EMPTY,
+            callback_data=json.dumps({"type": "none"}),
+        )
+        if medias:
+            skip_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_SKIP,
+                callback_data=json.dumps({"type": "skip"}),
+            )
 
         return InlineKeyboardMarkup(
             [
                 [
                     resume_pause_button,
-                    InlineKeyboardButton(
-                        KEYBOARD_BUTTON_SKIP,
-                        callback_data=json.dumps({"type": "skip"}),
-                    ),
+                    skip_button,
                     InlineKeyboardButton(
                         KEYBOARD_BUTTON_FR,
-                        callback_data=json.dumps({"type": "seek", "data": 10}),
+                        callback_data=json.dumps({"type": "seek", "seconds": -10}),
                     ),
                     InlineKeyboardButton(
                         KEYBOARD_BUTTON_FF,
-                        callback_data=json.dumps({"type": "seek", "data": -10}),
+                        callback_data=json.dumps({"type": "seek", "seconds": 10}),
                     ),
                 ],
             ]
@@ -435,7 +522,7 @@ class TelegramBot:
                     await self._reply(update, MESSAGE_UNABLE_TO_PLAY_EMPTY)
                 return
 
-            await self._add_medias(update, context.args)
+            asyncio.create_task(self._add_medias(update, context.args))
 
         except Exception:
             logger.error("Unable to perform play command.", exc_info=True)
@@ -445,7 +532,9 @@ class TelegramBot:
         # Notifying people, that we are trying our best
         status_message = await self._reply(
             update,
-            MESSAGE_MEDIA_ADDING.format("\n".join(f"- `{url}`" for url in uris)),
+            MESSAGE_MEDIA_ADDING.format(
+                "\n".join(f"\\- `{escape_markdown(url, 2)}`" for url in uris)
+            ),
         )
 
         # Saving request to database.
@@ -453,9 +542,57 @@ class TelegramBot:
 
         # Trying to fetch medias from playlist
         medias: tp.List[tp.Tuple[str, Media]] = []
+        url_to_medias = {}
         for url in uris:
             new_medias = await self._add_to_playlist_cb(url)
+
+            url_to_medias[url] = new_medias
             medias += [(url, media) for media in new_medias]
+
+            print(
+                MESSAGE_REPLY_TEMPLATE.format(
+                    escape_markdown(update.message.from_user.name, 2),
+                    MESSAGE_MEDIA_ADDED.format(
+                        len(medias),
+                        "\n".join(
+                            [
+                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                                for url in uris
+                                if url in url_to_medias
+                                for media in url_to_medias[url]
+                            ]
+                            + [
+                                f"\\- `{escape_markdown(url, 2)}`"
+                                for url in uris
+                                if url not in url_to_medias
+                            ]
+                        ),
+                    ),
+                )
+            )
+            # Notifying people, about process
+            await status_message.edit_text(
+                MESSAGE_REPLY_TEMPLATE.format(
+                    escape_markdown(update.message.from_user.name, 2),
+                    MESSAGE_MEDIA_ADDED.format(
+                        len(medias),
+                        "\n".join(
+                            [
+                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                                for url in uris
+                                if url in url_to_medias
+                                for media in url_to_medias[url]
+                            ]
+                            + [
+                                f"\\- `{escape_markdown(url, 2)}`"
+                                for url in uris
+                                if url not in url_to_medias
+                            ]
+                        ),
+                    ),
+                ),
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
 
         # Notifying people, that we was successfull about it.
         await status_message.edit_text(
@@ -465,13 +602,13 @@ class TelegramBot:
                     len(medias),
                     "\n".join(
                         [
-                            f"- [{escape_markdown(await media.media_title)}]({url})"
+                            f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
                             for url, media in medias
                         ]
                     ),
                 ),
             ),
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -493,8 +630,10 @@ class TelegramBot:
         if self._debug_mode:
             await self._application.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=MESSAGE_BIG_INTERNAL_ERROR.format(traceback.format_exc()),
-                parse_mode=ParseMode.MARKDOWN,
+                text=MESSAGE_BIG_INTERNAL_ERROR.format(
+                    escape_markdown(traceback.format_exc(), 2)
+                ),
+                parse_mode=ParseMode.MARKDOWN_V2,
             )
         else:
             await update.message.reply_text(MESSAGE_SMALL_INTERNAL_ERROR)
@@ -503,7 +642,7 @@ class TelegramBot:
         if self._debug_mode:
             await update.message.reply_text(
                 MESSAGE_BIG_INTERNAL_ERROR.format(message),
-                parse_mode=ParseMode.MARKDOWN,
+                parse_mode=ParseMode.MARKDOWN_V2,
             )
         else:
             await self._reply(update, MESSAGE_SMALL_INTERNAL_ERROR)
@@ -514,7 +653,7 @@ class TelegramBot:
                 await self._application.bot.send_message(
                     chat_id=chat_id,
                     text=text,
-                    parse_mode=ParseMode.MARKDOWN,
+                    parse_mode=ParseMode.MARKDOWN_V2,
                 )
             except Exception:
                 logger.error("Unable to notify %s chat", str(chat_id))
@@ -525,15 +664,15 @@ class TelegramBot:
         await update.message.delete()
         return await self._application.bot.send_message(
             chat_id=chat_id,
-            text=MESSAGE_REPLY_TEMPLATE.format(escape_markdown(from_user.name), txt),
-            parse_mode=ParseMode.MARKDOWN,
+            text=MESSAGE_REPLY_TEMPLATE.format(escape_markdown(from_user.name, 2), txt),
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=reply_markup,
         )
 
     async def _reply_cb(self, query: CallbackQuery, txt: str):
         return await query.message.reply_text(
             text=txt,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.MARKDOWN_V2,
         )
 
     async def _callback_handler(
@@ -544,6 +683,10 @@ class TelegramBot:
         processors = {
             "replay": self._callback_replay,
             "volume": self._callback_volume,
+            "resume": self._callback_resume,
+            "pause": self._callback_pause,
+            "seek": self._callback_seek,
+            "skip": self._callback_skip,
         }
 
         try:
@@ -553,10 +696,52 @@ class TelegramBot:
 
             data = json.loads(query.data)
 
-            await processors[data["type"]](update, query, data)
+            asyncio.create_task(processors[data["type"]](update, query, data))
         except Exception:
             logger.error("Unable to perform callback.", exc_info=True)
             await self._exception_notify(update)
+
+    async def _callback_resume(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        await self._resume_cb()
+        await self._update_info_messages()
+
+    async def _callback_pause(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        await self._pause_cb()
+        await self._update_info_messages()
+
+    async def _callback_seek(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        value = data["seconds"]
+
+        current_cursor = self._get_cursor_cb()
+        current_cursor += value
+        current_cursor = sorted((0, current_cursor, self._get_length_cb()))[1]
+        self._set_cursor_cb(current_cursor)
+
+        await self._update_info_messages()
+
+    async def _callback_skip(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        await self._skip_cb()
+        await self._update_info_messages()
 
     async def _callback_volume(
         self,
@@ -579,10 +764,10 @@ class TelegramBot:
 
         await query.message.edit_text(
             text=MESSAGE_REPLY_TEMPLATE.format(
-                escape_markdown(query.from_user.name),
+                escape_markdown(query.from_user.name, 2),
                 MESSAGE_VOLUME_STATUS.format(current_volume),
             ),
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -615,30 +800,55 @@ class TelegramBot:
         # Notifying people, that we are trying our best
         status_message = await self._reply_cb(
             query,
-            MESSAGE_MEDIA_READDING.format("\n".join(f"- `{url}`" for url in uris)),
+            MESSAGE_MEDIA_READDING.format(
+                "\n".join(f"\\- `{escape_markdown(url, 2)}`" for url in uris)
+            ),
         )
 
         # Trying to fetch medias from playlist
         medias: tp.List[tp.Tuple[str, Media]] = []
+        url_to_medias = {}
         for url in uris:
             new_medias = await self._add_to_playlist_cb(url)
             medias += [(url, media) for media in new_medias]
+            await status_message.edit_text(
+                MESSAGE_REPLY_TEMPLATE.format(
+                    escape_markdown(query.from_user.name, 2),
+                    MESSAGE_MEDIA_READDED.format(
+                        len(medias),
+                        "\n".join(
+                            [
+                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                                for url in uris
+                                if url in url_to_medias
+                                for media in url_to_medias[url]
+                            ]
+                            + [
+                                f"\\- `{escape_markdown(url, 2)}`"
+                                for url in uris
+                                if url not in url_to_medias
+                            ]
+                        ),
+                    ),
+                ),
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
 
         # Notifying people, that we was successfull about it.
         await status_message.edit_text(
             MESSAGE_REPLY_TEMPLATE.format(
-                escape_markdown(query.from_user.name),
+                escape_markdown(query.from_user.name, 2),
                 MESSAGE_MEDIA_READDED.format(
                     len(medias),
                     "\n".join(
                         [
-                            f"- [{escape_markdown(await media.media_title)}]({url})"
+                            f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url)})"
                             for url, media in medias
                         ]
                     ),
                 ),
             ),
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
