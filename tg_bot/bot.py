@@ -414,16 +414,6 @@ class TelegramBot:
             text,
         )
 
-        logger.info(
-            "%s",
-            str(
-                (
-                    message.reply_markup == self.generate_info_buttons(),
-                    message.text.strip() == real_text.strip(),
-                )
-            ),
-        )
-
         if all(
             (
                 message.reply_markup == self.generate_info_buttons(),
