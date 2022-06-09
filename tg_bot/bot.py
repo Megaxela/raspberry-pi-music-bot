@@ -49,8 +49,8 @@ MESSAGE_UNABLE_TO_PLAY_EMPTY = (
     "⚠️ Невозможно поставить на паузу или продолжить\\. Плеер ничего не играет\\."
 )
 MESSAGE_SKIPPING = "🤔 Пытаемся пропустить..."
-MESSAGE_SKIP_SUCCESS = "💩 Трек был пропущен\\."
-MESSAGE_SKIP_FAIL = "🤔 Нечего пропускать\\."
+MESSAGE_SKIP_SUCCESS = "💩 Трек был пропущен."
+MESSAGE_SKIP_FAIL = "🤔 Нечего пропускать."
 
 MESSAGE_PAUSE_SUCCESS = "⏸️ Музыка успешно поставлена на паузу"
 MESSAGE_RESUME_SUCCESS = "▶️ Музыка успешно продолжена"
@@ -295,15 +295,15 @@ class TelegramBot:
             if self._skip_cb is None:
                 await self._error_notify(update, f"{self._skip_cb=}")
 
-            message = await self._reply(update, MESSAGE_SKIPPING)
+            message = await self._reply(update, escape_markdown(MESSAGE_SKIPPING, 2))
             if await self._skip_cb():
                 await message.edit_text(
-                    MESSAGE_SKIP_SUCCESS,
+                    escape_markdown(MESSAGE_SKIP_SUCCESS, 2),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
             else:
                 await message.edit_text(
-                    MESSAGE_SKIP_FAIL,
+                    escape_markdown(MESSAGE_SKIP_FAIL, 2),
                     parse_mode=ParseMode.MARKDOWN_V2,
                 )
 
@@ -353,23 +353,35 @@ class TelegramBot:
     async def _auto_update_info_messages(self):
         update_interval = datetime.timedelta(seconds=5)
         while True:
-            sleep_amount = (
-                update_interval - (datetime.datetime.now() - self._last_update)
-            ).seconds + 1
+            try:
+                sleep_amount = (
+                    update_interval - (datetime.datetime.now() - self._last_update)
+                ).seconds + 1
 
-            logger.info("Waiting until next info update for %d seconds", sleep_amount)
-            await asyncio.sleep(sleep_amount)
+                logger.info(
+                    "Waiting until next info update for %d seconds", sleep_amount
+                )
+                await asyncio.sleep(sleep_amount)
 
-            if datetime.datetime.now() < (self._last_update + update_interval):
-                logger.info("Trying to autoupdate too early, waiting again.")
-                continue
+                if datetime.datetime.now() < (self._last_update + update_interval):
+                    logger.info("Trying to autoupdate too early, waiting again.")
+                    continue
 
-            await self._update_info_messages()
+                await self._update_info_messages()
+            except:
+                logger.error(
+                    "Uncatched auto-update exception (see below). Waiting %d seconds before retrying",
+                    update_interval.seconds,
+                    exc_info=True,
+                )
+                await asyncio.sleep(update_interval.seconds)
 
     async def _update_info_messages(self):
         self._last_update = datetime.datetime.now()
         medias = self._list_playlist_cb()
-        titles = "\n".join([f"\\- `{await media.media_title}`" for media in medias])
+        titles = "\n".join(
+            [f"\\- `{escape_markdown(await media.media_title, 2)}`" for media in medias]
+        )
         status = await self._player_status_fmt()
 
         text = MESSAGE_LIST_PLAYLIST.format(
