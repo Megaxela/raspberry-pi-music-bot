@@ -111,9 +111,9 @@ class TelegramBot:
         self._application.add_handler(
             MessageHandler(filters.Regex(r"^((\\o|o\/|\\o\/) *)+$"), self.on_hi)
         )
-        self._application.add_handler(
-            MessageHandler(filters
-        )
+        # self._application.add_handler(
+        #     MessageHandler(filters
+        # )
 
         self._add_to_playlist_cb: tp.Optional[AddToPlaylistCallback] = None
         self._list_playlist_cb: tp.Optional[ListPlaylistCallback] = None
