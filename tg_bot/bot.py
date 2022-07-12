@@ -16,7 +16,6 @@ from telegram import (
     User,
     Message,
     CallbackQuery,
-    ForceReply,
     Update,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
@@ -110,7 +109,10 @@ class TelegramBot:
         self._application.add_handler(CommandHandler("v", self.on_volume_command))
         self._application.add_handler(CommandHandler("seek", self.on_seek_command))
         self._application.add_handler(
-            MessageHandler(filters.Regex(r"^\\o$"), self.on_hi)
+            MessageHandler(filters.Regex(r"^(\\o\s+)+\\o$"), self.on_hi)
+        )
+        self._application.add_handler(
+            MessageHandler(filters.Regex(r"^(o\/\s+)+o\/$"), self.on_hi)
         )
 
         self._add_to_playlist_cb: tp.Optional[AddToPlaylistCallback] = None
@@ -163,9 +165,9 @@ class TelegramBot:
     ):
         try:
             # Do not use self._reply here, cause it may delete initial message.
-            await update.message.reply_text("\\o")
+            await update.message.reply_text(update.message.text)
         except Exception:
-            logger.error("Unable to perform skip command.", exc_info=True)
+            logger.error("Unable to say hi.", exc_info=True)
             await self._exception_notify(update)
 
     async def on_seek_command(
@@ -354,9 +356,10 @@ class TelegramBot:
         update_interval = datetime.timedelta(seconds=5)
         while True:
             try:
-                sleep_amount = (
-                    update_interval - (datetime.datetime.now() - self._last_update)
-                ).seconds + 1
+                execution_amount = datetime.datetime.now() - self._last_update
+                sleep_amount = 0
+                if execution_amount < update_interval:
+                    sleep_amount = (update_interval - execution_amount).seconds + 1
 
                 logger.info(
                     "Waiting until next info update for %d seconds", sleep_amount
