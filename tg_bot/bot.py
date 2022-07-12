@@ -109,11 +109,17 @@ class TelegramBot:
         self._application.add_handler(CommandHandler("v", self.on_volume_command))
         self._application.add_handler(CommandHandler("seek", self.on_seek_command))
         self._application.add_handler(
-            MessageHandler(filters.Regex(r"^((\\o|o\/|\\o\/) *)+$"), self.on_hi)
+            MessageHandler(
+                filters.Regex(r"^((\\o|o\/|\\o\/) *)+$"),
+                self.on_hi,
+            )
         )
-        # self._application.add_handler(
-        #     MessageHandler(filters
-        # )
+        self._application.add_handler(
+            MessageHandler(
+                filters.Regex(r"^(☀️|🌤|🌥|⛅️|🌦|🌞|🌅)$"),
+                self.on_emoji_hi,
+            )
+        )
 
         self._add_to_playlist_cb: tp.Optional[AddToPlaylistCallback] = None
         self._list_playlist_cb: tp.Optional[ListPlaylistCallback] = None
@@ -157,6 +163,18 @@ class TelegramBot:
 
     async def notify_currently_playing(self, media: Media):
         await self._notify(MESSAGE_NOTIFY_AUTOPLAY.format(await media.media_title))
+
+    async def on_emoji_hi(
+        self,
+        update: Update,
+        context: CallbackContext.DEFAULT_TYPE,
+    ):
+        try:
+            # Do not use self._reply here, cause it may delete initial message.
+            await update.message.reply_text("🤚")
+        except Exception:
+            logger.error("Unable to say hi.", exc_info=True)
+            await self._exception_notify(update)
 
     async def on_hi(
         self,
