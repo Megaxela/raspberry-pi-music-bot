@@ -502,6 +502,16 @@ class TelegramBot:
                         callback_data=json.dumps({"type": "seek", "seconds": 10}),
                     ),
                 ],
+                [
+                    InlineKeyboardButton(
+                        KEYBOARD_BUTTON_VOLUME_SUB,
+                        callback_data=json.dumps({"type": "volume", "value": -10}),
+                    ),
+                    InlineKeyboardButton(
+                        KEYBOARD_BUTTON_VOLUME_ADD,
+                        callback_data=json.dumps({"type": "volume", "value": 10}),
+                    ),
+                ],
             ]
         )
 
