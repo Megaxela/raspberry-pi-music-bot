@@ -7,6 +7,7 @@ from multimedia.player import Player, PlayerState
 from multimedia.media import Media
 from multimedia.playlist import Playlist
 from database import Database
+from media_parser.youtube_playlist_parser import YoutubePlaylistParser
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,11 @@ class Service:
         )
         self._playlist = Playlist()
         self._player = Player()
+
+        # Preparing extention parsers
+        self._media_parsers = [
+            YoutubePlaylistParser(),
+        ]
 
         # Setting up bot
         self._bot.add_to_playlist_cb = self._on_add_content
@@ -63,6 +69,40 @@ class Service:
         await self.autoplay()
 
     async def _on_add_content(self, mri: str):
+        # Trying to preparse media
+        for parser in self._media_parsers:
+            # Does parser is suitable for provided url
+            if not await parser.is_suitable(mri):
+                continue
+
+            # Trying to parse media with parser
+            try:
+                parsed_media = await parser.parse_media(mri)
+            except Exception:
+                logger.warning(
+                    "Preparsing '%s' with '%s' failed",
+                    mri,
+                    str(parser),
+                    exc_info=True,
+                )
+                continue
+
+            if not isinstance(parsed_media, list):
+                logger.warning(
+                    "Parser '%s' returned '%s' instead of 'list'",
+                    str(parser),
+                    type(parsed_media),
+                )
+                break
+
+            result = []
+            logger.info(
+                "Adding %d medias parsed with '%s'", len(parsed_media), str(parser)
+            )
+            for media in parsed_media:
+                result += await self._on_add_content(media)
+            return result
+
         content = await self._playlist.add_content(mri)
 
         if self._player.state == PlayerState.Stopped:
