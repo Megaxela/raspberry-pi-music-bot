@@ -41,6 +41,7 @@ MESSAGE_MEDIA_READDING_FAIL = (
     "😔 Похоже, что это сообщение не может быть передобавлено\\."
 )
 MESSAGE_LIST_PLAYLIST = """🎶 {}
+{}
 
 Треков в плейлисте {} шт\\.:
 {}"""
@@ -64,8 +65,8 @@ MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
 
 KEYBOARD_BUTTON_EMPTY = "❌"
 KEYBOARD_BUTTON_REPEAT = "Повторить"
-KEYBOARD_BUTTON_VOLUME_ADD = "+10"
-KEYBOARD_BUTTON_VOLUME_SUB = "-10"
+KEYBOARD_BUTTON_VOLUME_ADD = "🔈 +10"
+KEYBOARD_BUTTON_VOLUME_SUB = "🔊 -10"
 KEYBOARD_BUTTON_PAUSE = "⏸️"
 KEYBOARD_BUTTON_RESUME = "▶️"
 KEYBOARD_BUTTON_SKIP = "⏭️"
@@ -354,6 +355,7 @@ class TelegramBot:
                     update,
                     MESSAGE_LIST_PLAYLIST.format(
                         await self._player_status_fmt(),
+                        await self._player_volume_fmt(),
                         len(medias),
                         "\n".join(
                             [
@@ -403,10 +405,10 @@ class TelegramBot:
         titles = "\n".join(
             [f"\\- `{escape_markdown(await media.media_title, 2)}`" for media in medias]
         )
-        status = await self._player_status_fmt()
 
         text = MESSAGE_LIST_PLAYLIST.format(
-            status,
+            await self._player_status_fmt(),
+            await self._player_volume_fmt(),
             len(medias),
             titles,
         )
@@ -514,6 +516,9 @@ class TelegramBot:
                 ],
             ]
         )
+
+    async def _player_volume_fmt(self):
+        return MESSAGE_VOLUME_STATUS.format(self._get_volume_cb())
 
     async def _player_status_fmt(self):
         state = self._current_player_state_cb()
@@ -787,35 +792,7 @@ class TelegramBot:
         old_volume = self._get_volume_cb()
         new_volume = sorted((0, old_volume + value, 100))[1]
         self._set_volume_cb(new_volume)
-
-        # We do not want to receive exception,
-        # that message was not changed.
-        if old_volume == new_volume:
-            return
-
-        current_volume = self._get_volume_cb()
-
-        await query.message.edit_text(
-            text=MESSAGE_REPLY_TEMPLATE.format(
-                escape_markdown(query.from_user.name, 2),
-                MESSAGE_VOLUME_STATUS.format(current_volume),
-            ),
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            KEYBOARD_BUTTON_VOLUME_SUB,
-                            callback_data=json.dumps({"type": "volume", "value": -10}),
-                        ),
-                        InlineKeyboardButton(
-                            KEYBOARD_BUTTON_VOLUME_ADD,
-                            callback_data=json.dumps({"type": "volume", "value": 10}),
-                        ),
-                    ],
-                ]
-            ),
-        )
+        await self._update_info_messages()
 
     async def _callback_replay(
         self,
