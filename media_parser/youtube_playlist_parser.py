@@ -266,7 +266,7 @@ class YoutubePlaylistParser(BasicParser):
                     },
                     data=json.dumps(
                         self._build_continuation_request_body(
-                            playlist_id=url,
+                            playlist_url=url,
                             continuation_token=token,
                         )
                     ),

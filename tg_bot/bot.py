@@ -30,6 +30,8 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
+from telegram.error import BadRequest
+
 MESSAGE_REPLY_TEMPLATE = "⚙️ {}: {}"
 MESSAGE_SMALL_INTERNAL_ERROR = "😔 Что-то случилось и я теперь не могу работать\\."
 MESSAGE_BIG_INTERNAL_ERROR = "😡🔧 Кое что случилось\\. Ошибку смотри ниже:\n```\n{}\n```"
@@ -106,8 +108,6 @@ class TelegramBot:
         self._application.add_handler(CommandHandler("info", self.on_info_command))
         self._application.add_handler(CommandHandler("playlist", self.on_info_command))
         self._application.add_handler(CommandHandler("skip", self.on_skip_command))
-        self._application.add_handler(CommandHandler("volume", self.on_volume_command))
-        self._application.add_handler(CommandHandler("v", self.on_volume_command))
         self._application.add_handler(CommandHandler("seek", self.on_seek_command))
         self._application.add_handler(
             MessageHandler(
@@ -456,6 +456,8 @@ class TelegramBot:
                 ),
                 user_from,
             )
+        except BadRequest as e:
+            logger.warning("Trying to set the same text probably: %s", str(e))
         except:
             logger.error("Exception acquired:", exc_info=True)
 
