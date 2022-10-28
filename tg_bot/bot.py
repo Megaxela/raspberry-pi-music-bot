@@ -262,11 +262,19 @@ class TelegramBot:
         try:
             addresses = list(
                 filter(
-                    lambda x: x[1] is not None
-                    and x[0] not in blacklist_ifaces
-                    and "addr" in x[1],
+                    lambda x: x is not None
+                    and len(x[1]) > 0
+                    and x[0] not in blacklist_ifaces,
                     map(
-                        lambda x: (x, netifaces.ifaddresses(x).get(netifaces.AF_INET)),
+                        lambda x: (
+                            x,
+                            list(
+                                filter(
+                                    lambda x: "addr" in x,
+                                    netifaces.ifaddresses(x).get(netifaces.AF_INET, []),
+                                )
+                            ),
+                        ),
                         netifaces.interfaces(),
                     ),
                 )
@@ -277,9 +285,17 @@ class TelegramBot:
             self._reply(
                 update,
                 MESSAGE_WHEREAMI.format(
-                    "\n".join(
+                    "\n\n".join(
                         (
-                            f"{{:<{max_iface_len}}} - {{}}".format(iface, addr["addr"])
+                            f"{{:<{max_iface_len}}} - {{}}".format(
+                                iface,
+                                "\n".join(
+                                    [
+                                        f"{{:<{max_iface_len + 3}}}".format(a["addr"])
+                                        for a in addr
+                                    ]
+                                ),
+                            )
                             for iface, addr in addresses
                         )
                     )
