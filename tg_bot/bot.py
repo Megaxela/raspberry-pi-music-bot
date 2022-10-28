@@ -10,6 +10,7 @@ from multimedia.media import Media
 from multimedia.player import PlayerState
 from database import Database
 
+import netifaces
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 from telegram import (
@@ -65,6 +66,11 @@ MESSAGE_VOLUME_STATUS = "Текущая громкость: `{}/100`"
 
 MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
 
+MESSAGE_WHEREAMI = """🤔 Хде я? А вот хде я:
+```
+{}
+```"""
+
 KEYBOARD_BUTTON_EMPTY = "❌"
 KEYBOARD_BUTTON_REPEAT = "Повторить"
 KEYBOARD_BUTTON_VOLUME_ADD = "🔈 +10"
@@ -109,6 +115,9 @@ class TelegramBot:
         self._application.add_handler(CommandHandler("playlist", self.on_info_command))
         self._application.add_handler(CommandHandler("skip", self.on_skip_command))
         self._application.add_handler(CommandHandler("seek", self.on_seek_command))
+        self._application.add_handler(
+            CommandHandler("whereami", self.on_whereami_command)
+        )
         self._application.add_handler(
             MessageHandler(
                 filters.Regex(r"^((\\o|o\/|\\o\/) *)+$"),
@@ -242,6 +251,42 @@ class TelegramBot:
 
         except Exception:
             logger.error("Unable to perform seek command.", exc_info=True)
+            await self._exception_notify(update)
+
+    async def on_whereami_command(
+        self,
+        update: Update,
+        context: CallbackContext.DEFAULT_TYPE,
+    ):
+        blacklist_ifaces = {"lo"}
+        try:
+            addresses = list(
+                filter(
+                    lambda x: x[1] is not None
+                    and x[0] not in blacklist_ifaces
+                    and "addr" in x[1],
+                    map(
+                        lambda x: (x, netifaces.ifaddresses(x).get(netifaces.AF_INET)),
+                        netifaces.interfaces(),
+                    ),
+                )
+            )
+
+            max_iface_len = len(max(*addresses, key=lambda x: len(x[0]))[0])
+
+            self._reply(
+                update,
+                MESSAGE_WHEREAMI.format(
+                    "\n".join(
+                        (
+                            f"{{:<{max_iface_len}}} - {{}}".format(iface, addr["addr"])
+                            for iface, addr in addresses
+                        )
+                    )
+                ),
+            )
+        except Exception:
+            logger.error("Unable to see where am I.", exc_info=True)
             await self._exception_notify(update)
 
     async def on_volume_command(
