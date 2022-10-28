@@ -282,7 +282,7 @@ class TelegramBot:
 
             max_iface_len = len(max(*addresses, key=lambda x: len(x[0]))[0])
 
-            self._reply(
+            await self._reply(
                 update,
                 MESSAGE_WHEREAMI.format(
                     "\n\n".join(
