@@ -9,7 +9,7 @@ class YoutubePlaylistParser(BasicParser):
         self._client = YoutubePlaylistClient()
 
     async def is_suitable(self, url: str) -> bool:
-        return self._client.is_playlist(url)
+        return await self._client.is_playlist(url)
 
     async def parse_media(self, url: str) -> tp.List[str]:
-        return self._client.parse_media(url)
+        return await self._client.parse_media(url)
