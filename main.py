@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 import os
+import ctypes
 
 import vlc
 
@@ -11,9 +12,50 @@ from multimedia.playlist import Playlist
 
 from service import Service
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)-8s] [%(funcName)-30s] [%(filename)+20s:%(lineno)-4d] %(message)s",
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+libc = ctypes.CDLL(ctypes.util.find_library("c"))
+
+
+@vlc.CallbackDecorators.LogCb
+def vlc_log_handler(instance, log_level, ctx, fmt, va_list):
+    levels = [
+        logging.INFO,
+        logging.ERROR,
+        logging.WARN,
+        logging.DEBUG,
+        logging.CRITICAL,
+    ]
+
+    # Fetching context info
+    module, log_source_file, log_source_line = vlc.libvlc_log_get_context(ctx)
+
+    log_source_file = log_source_file.decode("utf-8")
+    module = module.decode("utf-8")
+
+    message_buffer = ctypes.create_string_buffer(16384)
+    libc.vsprintf(message_buffer, fmt, ctypes.cast(va_list, ctypes.c_void_p))
+
+    message = message_buffer.value.decode("utf-8")
+
+    logger.handle(
+        logger.makeRecord(
+            name=logger.name,
+            level=levels[log_level],
+            fn=log_source_file,
+            lno=log_source_line,
+            msg=message,
+            args=[],
+            exc_info=None,
+            func=f"vlc {module}",
+        )
+    )
 
 
 async def main():
@@ -44,5 +86,7 @@ if __name__ == "__main__":
             "-v",
         ]
     )
+
+    vlc._default_instance.log_set(vlc_log_handler, None)
 
     asyncio.run(main())

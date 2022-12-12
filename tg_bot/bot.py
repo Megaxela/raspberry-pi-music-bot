@@ -5,6 +5,7 @@ import traceback
 import json
 import asyncio
 import datetime
+import pprint
 
 from multimedia.media import Media
 from multimedia.player import PlayerState
@@ -520,10 +521,12 @@ class TelegramBot:
             text,
         )
 
+        buttons = self.generate_info_buttons()
+
         if all(
             (
-                message.reply_markup == self.generate_info_buttons(),
-                message.text.strip() == real_text.strip(),
+                message.reply_markup == buttons,
+                message.text_markdown_v2.strip() == real_text.strip(),
             )
         ):
             return
@@ -534,19 +537,26 @@ class TelegramBot:
                     chat_id=chat_id,
                     message_id=message.message_id,
                     text=real_text,
-                    reply_markup=self.generate_info_buttons(),
+                    reply_markup=buttons,
                     parse_mode=ParseMode.MARKDOWN_V2,
                 ),
                 user_from,
             )
         except BadRequest as e:
             logger.warning("Trying to set the same text probably: %s", str(e))
+
+            logger.debug("Setting Text:\n%s", str(real_text.strip()))
+            logger.debug("Set Text:\n%s", str(message.text_markdown_v2.strip()))
+
+            logger.debug("Setting Markup:\n%s", str(pprint.pformat(buttons)))
+            logger.debug("Set Markup:\n%s", str(pprint.pformat(message.reply_markup)))
         except:
             logger.error("Exception acquired:", exc_info=True)
 
     def generate_info_buttons(self):
         state = self._current_player_state_cb()
-        medias = self._current_media_cb()
+        current_media = self._current_media_cb()
+        medias = self._list_playlist_cb()
 
         resume_pause_button = None
         if state == PlayerState.Playing:
@@ -574,12 +584,13 @@ class TelegramBot:
         skipall_button = none_button
         shuffle_button = none_button
 
-        if medias:
+        if current_media or medias:
             skip_button = InlineKeyboardButton(
                 KEYBOARD_BUTTON_SKIP,
                 callback_data=json.dumps({"type": "skip"}),
             )
 
+        if medias:
             skipall_button = InlineKeyboardButton(
                 KEYBOARD_BUTTON_SKIPALL,
                 callback_data=json.dumps({"type": "skipall"}),
@@ -689,27 +700,6 @@ class TelegramBot:
             url_to_medias[url] = new_medias
             medias += [(url, media) for media in new_medias]
 
-            print(
-                MESSAGE_REPLY_TEMPLATE.format(
-                    escape_markdown(update.message.from_user.name, 2),
-                    MESSAGE_MEDIA_ADDED.format(
-                        len(medias),
-                        "\n".join(
-                            [
-                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
-                                for url in uris
-                                if url in url_to_medias
-                                for media in url_to_medias[url]
-                            ]
-                            + [
-                                f"\\- `{escape_markdown(url, 2)}`"
-                                for url in uris
-                                if url not in url_to_medias
-                            ]
-                        ),
-                    ),
-                )
-            )
             # Notifying people, about process
             await status_message.edit_text(
                 MESSAGE_REPLY_TEMPLATE.format(
@@ -718,7 +708,7 @@ class TelegramBot:
                         len(medias),
                         "\n".join(
                             [
-                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                                f"\\- [{escape_markdown(self._shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
                                 for url in uris
                                 if url in url_to_medias
                                 for media in url_to_medias[url]
@@ -742,7 +732,7 @@ class TelegramBot:
                     len(medias),
                     "\n".join(
                         [
-                            f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                            f"\\- [{escape_markdown(self._shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
                             for url, media in medias
                         ]
                     ),
@@ -950,7 +940,7 @@ class TelegramBot:
                         len(medias),
                         "\n".join(
                             [
-                                f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url, 2)})"
+                                f"\\- [{escape_markdown(self._shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
                                 for url in uris
                                 if url in url_to_medias
                                 for media in url_to_medias[url]
@@ -974,7 +964,7 @@ class TelegramBot:
                     len(medias),
                     "\n".join(
                         [
-                            f"\\- [{escape_markdown(await media.media_title, 2)}]({escape_markdown(url)})"
+                            f"\\- [{escape_markdown(self._shorten_to_message(await media.media_title), 2)}]({escape_markdown(url)})"
                             for url, media in medias
                         ]
                     ),
@@ -1017,8 +1007,8 @@ class TelegramBot:
     @staticmethod
     def _shorten_to_message(s: str) -> str:
         # technically it's 58, but different symbols has different length.
-        # 'W' is widest one (wider than '@')
-        max_line_len = 34
+        # 'Щ' is widest one (wider than '@' and 'W')
+        max_line_len = 30
         end_of_str = "..."
 
         if len(s) <= max_line_len:  # 58 is max amount of symbols in single line

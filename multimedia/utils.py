@@ -21,7 +21,12 @@ def wrap_vlc_event(ev: vlc.EventType, event: vlc.Event):
     f = loop.create_future()
 
     def cb():
-        f.set_result(None)
+        try:
+            f.set_result(None)
+        except asyncio.exceptions.InvalidStateError:
+            # Future is already done :idk
+            pass
+
         ev.event_detach(event)
 
     ev.event_attach(
