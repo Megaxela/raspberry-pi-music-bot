@@ -1,6 +1,7 @@
 import typing as tp
 import logging
 import asyncio
+import random
 
 from multimedia.media import Media
 
@@ -21,6 +22,12 @@ class Playlist:
         self._queue += flatten_medias
 
         return flatten_medias
+
+    def clear(self):
+        self._queue.clear()
+
+    def shuffle(self):
+        random.shuffle(self._queue)
 
     @property
     def items(self):

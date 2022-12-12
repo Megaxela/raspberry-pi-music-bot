@@ -49,6 +49,8 @@ class Service:
         self._bot.pause_cb = self._player.pause
         self._bot.resume_cb = self._player.resume
         self._bot.skip_cb = self.play_next
+        self._bot.skipall_cb = self.clear_playlist
+        self._bot.shuffle_cb = self.shuffle
         self._bot.get_seek_cb = propg(self._player, "cursor")
         self._bot.set_seek_cb = props(self._player, "cursor")
         self._bot.get_volume_cb = propg(self._player, "volume")
@@ -109,6 +111,13 @@ class Service:
             await self.play_next()
 
         return content
+
+    async def shuffle(self):
+        self._playlist.shuffle()
+
+    async def clear_playlist(self) -> bool:
+        self._playlist.clear()
+        return True
 
     async def play_next(self) -> bool:
         if not self._playlist.items:

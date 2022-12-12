@@ -48,6 +48,11 @@ MESSAGE_LIST_PLAYLIST = """🎶 {}
 
 Треков в плейлисте {} шт\\.:
 {}"""
+MESSAGE_TOO_MANY_TRACKS = "И еще {} {}, которые не влезли"
+MESSAGE_TOO_MANY_TRACKS_SINGLE = "трек"
+MESSAGE_TOO_MANY_TRACKS_DUAL = "трека"
+MESSAGE_TOO_MANY_TRACKS_MULTIPLE = "треков"
+
 MESSAGE_UNABLE_TO_PLAY_EMPTY = (
     "⚠️ Невозможно поставить на паузу или продолжить\\. Плеер ничего не играет\\."
 )
@@ -78,6 +83,8 @@ KEYBOARD_BUTTON_VOLUME_SUB = "🔊 -10"
 KEYBOARD_BUTTON_PAUSE = "⏸️"
 KEYBOARD_BUTTON_RESUME = "▶️"
 KEYBOARD_BUTTON_SKIP = "⏭️"
+KEYBOARD_BUTTON_SKIPALL = "⏏️"
+KEYBOARD_BUTTON_SHUFFLE = "🔀"
 KEYBOARD_BUTTON_FF = "⏩"
 KEYBOARD_BUTTON_FR = "⏪"
 
@@ -89,6 +96,8 @@ CurrentPlayerStateCallback = tp.Callable[[], PlayerState]
 PauseCallback = tp.Callable[[], None]
 ResumeCallback = tp.Callable[[], None]
 SkipCallback = tp.Callable[[], tp.Awaitable[None]]
+SkipAllCallback = tp.Callable[[], tp.Awaitable[None]]
+ShuffleCallback = tp.Callable[[], tp.Awaitable[None]]
 GetVolumeCallback = tp.Callable[[], int]
 SetVolumeCallback = tp.Callable[[int], None]
 GetCursorCallback = tp.Callable[[], int]
@@ -138,6 +147,8 @@ class TelegramBot:
         self._pause_cb: tp.Optional[PauseCallback] = None
         self._resume_cb: tp.Optional[ResumeCallback] = None
         self._skip_cb: tp.Optional[SkipCallback] = None
+        self._skipall_cb: tp.Optional[SkipAllCallback] = None
+        self._shuffle_cb: tp.Optional[ShuffleCallback] = None
         self._get_volume_cb: tp.Optional[GetVolumeCallback] = None
         self._set_volume_cb: tp.Optional[SetVolumeCallback] = None
         self._get_cursor_cb: tp.Optional[GetCursorCallback] = None
@@ -409,22 +420,10 @@ class TelegramBot:
                 await self._error_notify(update, f"{self.current_player_state_cb=}")
                 return
 
-            medias = self._list_playlist_cb()
-
             self._info_messages[update.effective_chat.id] = (
                 await self._reply(
                     update,
-                    MESSAGE_LIST_PLAYLIST.format(
-                        await self._player_status_fmt(),
-                        await self._player_volume_fmt(),
-                        len(medias),
-                        "\n".join(
-                            [
-                                f"\\- `{escape_markdown(await media.media_title, 2)}`"
-                                for media in medias
-                            ]
-                        ),
-                    ),
+                    await self._build_info_message(),
                     reply_markup=self.generate_info_buttons(),
                 ),
                 update.message.from_user,
@@ -460,20 +459,43 @@ class TelegramBot:
                 )
                 await asyncio.sleep(update_interval.seconds)
 
-    async def _update_info_messages(self):
-        self._last_update = datetime.datetime.now()
+    async def _build_info_message(self):
+        max_medias_per_info = 16
+
         medias = self._list_playlist_cb()
         titles = "\n".join(
-            [f"\\- `{escape_markdown(await media.media_title, 2)}`" for media in medias]
+            [
+                f"\\- `{escape_markdown(self._shorten_to_message(await media.media_title), 2)}`"
+                for media in medias[:max_medias_per_info]
+            ]
         )
 
-        text = MESSAGE_LIST_PLAYLIST.format(
+        if len(medias) > max_medias_per_info:
+            titles.append("\n")
+            tracks_left = len(medias) - max_medias_per_info
+            titles.append(
+                MESSAGE_TOO_MANY_TRACKS.format(
+                    tracks_left,
+                    self._choose_multiplication(
+                        tracks_left,  #
+                        word_for_single=MESSAGE_TOO_MANY_TRACKS_SINGLE,  #
+                        word_for_dual=MESSAGE_TOO_MANY_TRACKS_DUAL,  #
+                        word_for_multiple=MESSAGE_TOO_MANY_TRACKS_MULTIPLE,  #
+                    ),
+                )
+            )
+
+        return MESSAGE_LIST_PLAYLIST.format(
             await self._player_status_fmt(),
             await self._player_volume_fmt(),
             len(medias),
             titles,
         )
 
+    async def _update_info_messages(self):
+        text = await self._build_info_message()
+
+        self._last_update = datetime.datetime.now()
         await asyncio.gather(
             *[
                 self._update_info_message(
@@ -543,20 +565,37 @@ class TelegramBot:
                 callback_data=json.dumps({"type": "none"}),
             )
 
-        skip_button = InlineKeyboardButton(
+        none_button = InlineKeyboardButton(
             KEYBOARD_BUTTON_EMPTY,
             callback_data=json.dumps({"type": "none"}),
         )
+
+        skip_button = none_button
+        skipall_button = none_button
+        shuffle_button = none_button
+
         if medias:
             skip_button = InlineKeyboardButton(
                 KEYBOARD_BUTTON_SKIP,
                 callback_data=json.dumps({"type": "skip"}),
             )
 
+            skipall_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_SKIPALL,
+                callback_data=json.dumps({"type": "skipall"}),
+            )
+
+            shuffle_button = InlineKeyboardButton(
+                KEYBOARD_BUTTON_SHUFFLE,
+                callback_data=json.dumps({"type": "shuffle"}),
+            )
+
         return InlineKeyboardMarkup(
             [
                 [
                     resume_pause_button,
+                    skipall_button,
+                    shuffle_button,
                     skip_button,
                     InlineKeyboardButton(
                         KEYBOARD_BUTTON_FR,
@@ -788,6 +827,8 @@ class TelegramBot:
             "pause": self._callback_pause,
             "seek": self._callback_seek,
             "skip": self._callback_skip,
+            "skipall": self._callback_skipall,
+            "shuffle": self._callback_shuffle,
         }
 
         try:
@@ -809,6 +850,15 @@ class TelegramBot:
         data: tp.Any,
     ):
         await self._resume_cb()
+        await self._update_info_messages()
+
+    async def _callback_shuffle(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        await self._shuffle_cb()
         await self._update_info_messages()
 
     async def _callback_pause(
@@ -842,6 +892,15 @@ class TelegramBot:
         data: tp.Any,
     ):
         await self._skip_cb()
+        await self._update_info_messages()
+
+    async def _callback_skipall(
+        self,
+        update: Update,
+        query: CallbackQuery,
+        data: tp.Any,
+    ):
+        await self._skipall_cb()
         await self._update_info_messages()
 
     async def _callback_volume(
@@ -940,6 +999,33 @@ class TelegramBot:
         )
 
     @staticmethod
+    def _choose_multiplication(
+        number: int,
+        word_for_single: str,
+        word_for_dual: str,
+        word_for_multiple: str,
+    ):
+        last_symbol = str(number)[-1]
+        if last_symbol == "1":
+            return word_for_single
+        if last_symbol == "2":
+            return word_for_dual
+        if last_symbol == "3":
+            return word_for_dual
+        return word_for_multiple
+
+    @staticmethod
+    def _shorten_to_message(s: str) -> str:
+        # technically it's 58, but different symbols has different length.
+        # 'W' is widest one (wider than '@')
+        max_line_len = 34
+        end_of_str = "..."
+
+        if len(s) <= max_line_len:  # 58 is max amount of symbols in single line
+            return s
+        return f"{s[:max_line_len - len(end_of_str)]}{end_of_str}"
+
+    @staticmethod
     def _time_to_seconds(time: str) -> int:
         try:
             multipliers = [1, 60, 60 * 60, 60 * 60 * 24]
@@ -1025,6 +1111,22 @@ class TelegramBot:
     @skip_cb.setter
     def skip_cb(self, v: SkipCallback):
         self._skip_cb = v
+
+    @property
+    def skipall_cb(self) -> tp.Optional[SkipAllCallback]:
+        return self._skipall_cb
+
+    @skipall_cb.setter
+    def skipall_cb(self, v: SkipAllCallback):
+        self._skipall_cb = v
+
+    @property
+    def shuffle_cb(self) -> tp.Optional[ShuffleCallback]:
+        return self._shuffle_cb
+
+    @shuffle_cb.setter
+    def shuffle_cb(self, v: ShuffleCallback):
+        self._shuffle_cb = v
 
     @property
     def get_volume_cb(self) -> tp.Optional[GetVolumeCallback]:
