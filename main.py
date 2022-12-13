@@ -44,18 +44,21 @@ def vlc_log_handler(instance, log_level, ctx, fmt, va_list):
 
     message = message_buffer.value.decode("utf-8")
 
-    logger.handle(
-        logger.makeRecord(
-            name=logger.name,
-            level=levels[log_level],
-            fn=log_source_file,
-            lno=log_source_line,
-            msg=message,
-            args=[],
-            exc_info=None,
-            func=f"vlc {module}",
+    message_lines = message.split("\n")
+
+    for line in message_lines:
+        logger.handle(
+            logger.makeRecord(
+                name=logger.name,
+                level=levels[log_level],
+                fn=log_source_file,
+                lno=log_source_line,
+                msg=line,
+                args=[],
+                exc_info=None,
+                func=f"vlc {module}",
+            )
         )
-    )
 
 
 async def main():
