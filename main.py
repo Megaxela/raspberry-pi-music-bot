@@ -14,7 +14,7 @@ from service import Service
 
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(levelname)-8s] [%(funcName)-30s] [%(filename)+20s:%(lineno)-4d] %(message)s",
+    format="[%(levelname)-8s] [%(funcName)-30s] [%(filename)+23s:%(lineno)-4d] %(message)s",
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

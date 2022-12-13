@@ -42,22 +42,22 @@ class Service:
         ]
 
         # Setting up bot
-        self._bot.add_to_playlist_cb = self._on_add_content
-        self._bot.list_playlist_cb = propg(self._playlist, "items")
-        self._bot.current_media_cb = propg(self._player, "current_media")
-        self._bot.current_player_state_cb = propg(self._player, "state")
-        self._bot.pause_cb = self._player.pause
-        self._bot.resume_cb = self._player.resume
-        self._bot.skip_cb = self.play_next
-        self._bot.skipall_cb = self.clear_playlist
-        self._bot.shuffle_cb = self.shuffle
-        self._bot.get_seek_cb = propg(self._player, "cursor")
-        self._bot.set_seek_cb = props(self._player, "cursor")
-        self._bot.get_volume_cb = propg(self._player, "volume")
-        self._bot.set_volume_cb = props(self._player, "volume")
-        self._bot.get_cursor_cb = propg(self._player, "cursor")
-        self._bot.set_cursor_cb = props(self._player, "cursor")
-        self._bot.get_length_cb = propg(self._player, "length")
+        self._bot.callbacks.add_to_playlist = self._on_add_content
+        self._bot.callbacks.list_playlist = propg(self._playlist, "items")
+        self._bot.callbacks.current_media = propg(self._player, "current_media")
+        self._bot.callbacks.current_player_state = propg(self._player, "state")
+        self._bot.callbacks.pause = self._player.pause
+        self._bot.callbacks.resume = self._player.resume
+        self._bot.callbacks.skip = self.play_next
+        self._bot.callbacks.skipall = self.clear_playlist
+        self._bot.callbacks.shuffle = self.shuffle
+        self._bot.callbacks.get_seek = propg(self._player, "cursor")
+        self._bot.callbacks.set_seek = props(self._player, "cursor")
+        self._bot.callbacks.get_volume = propg(self._player, "volume")
+        self._bot.callbacks.set_volume = props(self._player, "volume")
+        self._bot.callbacks.get_cursor = propg(self._player, "cursor")
+        self._bot.callbacks.set_cursor = props(self._player, "cursor")
+        self._bot.callbacks.get_length = propg(self._player, "length")
 
     async def run(self):
         # Initializing database
