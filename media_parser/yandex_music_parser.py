@@ -11,7 +11,7 @@ TRACK_RE = re.compile(r"/album/[0-9]+/track/[0-9]+")
 ALBUM_RE = re.compile(r"/album/[0-9]+")
 
 
-class YandexPlaylistParser(BasicParser):
+class YandexMusicParser(BasicParser):
     def __init__(self):
         self._token = os.getenv("YA_MUSIC_TOKEN")
 
