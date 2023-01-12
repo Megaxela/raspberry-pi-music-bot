@@ -8,7 +8,7 @@ from multimedia.media import Media
 from multimedia.playlist import Playlist
 from database import Database
 from media_parser.youtube_playlist_parser import YoutubePlaylistParser
-from media_parser.yandex_music_parser import YandexPlaylistParser
+from media_parser.yandex_music_parser import YandexMusicParser
 
 logger = logging.getLogger(__name__)
 
