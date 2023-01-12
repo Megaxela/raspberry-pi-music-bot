@@ -2,8 +2,8 @@ import typing as tp
 import re
 import os
 
-from .basic_parser import BasicParser
-from clients.youtube import YoutubePlaylistClient
+
+# from .basic_parser import BasicParser
 
 BASE_URL_RE = re.compile(r"music\.yandex\.ru")
 PLAYLIST_RE = re.compile(r"/users/.*/playlists/[0-9]+")
@@ -11,7 +11,7 @@ TRACK_RE = re.compile(r"/album/[0-9]+/track/[0-9]+")
 ALBUM_RE = re.compile(r"/album/[0-9]+")
 
 
-class YandexMusicParser(BasicParser):
+class YandexMusicParser:
     def __init__(self):
         self._token = os.getenv("YA_MUSIC_TOKEN")
 
@@ -30,4 +30,4 @@ class YandexMusicParser(BasicParser):
         )
 
     async def parse_media(self, url: str) -> tp.List[str]:
-        return f"{url}?access_token={self._token}"
+        return [f"{url}?access_token={self._token}"]
