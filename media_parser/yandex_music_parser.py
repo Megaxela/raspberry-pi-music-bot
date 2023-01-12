@@ -5,7 +5,7 @@ import os
 
 # from .basic_parser import BasicParser
 
-BASE_URL_RE = re.compile(r"music\.yandex\.ru")
+BASE_URL_RE = re.compile(r"music\.yandex\.(ru|com)")
 PLAYLIST_RE = re.compile(r"/users/.*/playlists/[0-9]+")
 TRACK_RE = re.compile(r"/album/[0-9]+/track/[0-9]+")
 ALBUM_RE = re.compile(r"/album/[0-9]+")
@@ -34,3 +34,28 @@ class YandexMusicParser:
 
     async def parse_media(self, url: str) -> tp.List[str]:
         return [f"{url}?access_token={self._token}"]
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    u = "https://music.yandex.com/album/21370360/track/101378847"
+    parser = YandexMusicParser()
+
+    is_suitable = asyncio.new_event_loop().run_until_complete(parser.is_suitable(u))
+
+    print(
+        (
+            BASE_URL_RE.search(u),
+            any(
+                (
+                    PLAYLIST_RE.search(u),
+                    TRACK_RE.search(u),
+                    ALBUM_RE.search(u),
+                )
+            ),
+            not TOKEN_RE.search(u),
+        )
+    )
+    if is_suitable:
+        print(asyncio.new_event_loop().run_until_complete(parser.parse_media(u)))
