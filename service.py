@@ -101,7 +101,10 @@ class Service:
 
             result = []
             logger.info(
-                "Adding %d medias parsed with '%s'", len(parsed_media), str(parser)
+                "Adding %d medias parsed with '%s': %s",
+                len(parsed_media),
+                str(parser),
+                ", ".join(parsed_media),
             )
             for media in parsed_media:
                 result += await self._on_add_content(media)
