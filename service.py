@@ -8,6 +8,7 @@ from multimedia.media import Media
 from multimedia.playlist import Playlist
 from database import Database
 from media_parser.youtube_playlist_parser import YoutubePlaylistParser
+from media_parser.yandex_music_parser import YandexPlaylistParser
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class Service:
         # Preparing extention parsers
         self._media_parsers = [
             YoutubePlaylistParser(),
+            YandexMusicParser(),
         ]
 
         # Setting up bot
