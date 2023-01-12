@@ -10,7 +10,7 @@ PLAYLIST_RE = re.compile(r"/users/.*/playlists/[0-9]+")
 TRACK_RE = re.compile(r"/album/[0-9]+/track/[0-9]+")
 ALBUM_RE = re.compile(r"/album/[0-9]+")
 
-TOKEN_RE = re.compile(r"?access_token=.+")
+TOKEN_RE = re.compile(r"\?access_token=.+")
 
 
 class YandexMusicParser:
