@@ -1,9 +1,9 @@
 import typing as tp
 import re
 import os
+from urllib.parse import urlparse
 
-
-# from .basic_parser import BasicParser
+from .basic_parser import BasicParser
 
 BASE_URL_RE = re.compile(r"music\.yandex\.(ru|com)")
 PLAYLIST_RE = re.compile(r"/users/.*/playlists/[0-9]+")
@@ -13,7 +13,7 @@ ALBUM_RE = re.compile(r"/album/[0-9]+")
 TOKEN_RE = re.compile(r"\?access_token=.+")
 
 
-class YandexMusicParser:
+class YandexMusicParser(BasicParser):
     def __init__(self):
         self._token = os.getenv("YA_MUSIC_TOKEN")
 
@@ -33,6 +33,7 @@ class YandexMusicParser:
         )
 
     async def parse_media(self, url: str) -> tp.List[str]:
+        url = urlparse(url)._replace(query="").geturl()
         return [f"{url}?access_token={self._token}"]
 
 
