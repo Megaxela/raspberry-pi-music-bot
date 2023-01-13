@@ -117,6 +117,7 @@ class InfoUpdaterModule(BasicUtilityModule):
         max_medias_per_info = 16
 
         medias = self.callbacks.list_playlist()
+
         titles = "\n".join(
             [
                 f"\\- `{escape_markdown(await media.media_title, 2)}`"
@@ -125,18 +126,16 @@ class InfoUpdaterModule(BasicUtilityModule):
         )
 
         if len(medias) > max_medias_per_info:
-            titles.append("\n")
+            titles += "\n"
             tracks_left = len(medias) - max_medias_per_info
-            titles.append(
-                MESSAGE_TOO_MANY_TRACKS.format(
-                    tracks_left,
-                    choose_multiplication(
-                        tracks_left,  #
-                        word_for_single=MESSAGE_TOO_MANY_TRACKS_SINGLE,  #
-                        word_for_dual=MESSAGE_TOO_MANY_TRACKS_DUAL,  #
-                        word_for_multiple=MESSAGE_TOO_MANY_TRACKS_MULTIPLE,  #
-                    ),
-                )
+            titles += MESSAGE_TOO_MANY_TRACKS.format(
+                tracks_left,
+                choose_multiplication(
+                    tracks_left,  #
+                    word_for_single=MESSAGE_TOO_MANY_TRACKS_SINGLE,  #
+                    word_for_dual=MESSAGE_TOO_MANY_TRACKS_DUAL,  #
+                    word_for_multiple=MESSAGE_TOO_MANY_TRACKS_MULTIPLE,  #
+                ),
             )
 
         return MESSAGE_LIST_PLAYLIST.format(
