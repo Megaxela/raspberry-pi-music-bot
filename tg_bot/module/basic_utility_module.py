@@ -1,6 +1,7 @@
 import traceback
 
 from tg_bot.module.basic_module import BasicModule
+from tg_bot.module.context import ModuleContext
 
 from telegram import Update, CallbackQuery
 from telegram.helpers import escape_markdown
@@ -13,6 +14,9 @@ MESSAGE_REPLY_TEMPLATE = "⚙️ {}: {}"
 
 
 class BasicUtilityModule(BasicModule):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     async def _exception_notify(self, update: Update):
         if self.is_debug:
             await self.application.bot.send_message(

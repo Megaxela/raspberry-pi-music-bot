@@ -161,7 +161,7 @@ class PlayerModule(BasicUtilityModule):
         data: tp.Any,
     ):
         message_id = data["play_message_id"]
-        uris = await self._database.fetch_uris_from_play_message(message_id)
+        uris = await self.database.fetch_uris_from_play_message(message_id)
 
         if not uris:
             await self._reply_cb(query, MESSAGE_MEDIA_READDING_FAIL)
