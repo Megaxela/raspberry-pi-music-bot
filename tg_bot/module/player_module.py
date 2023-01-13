@@ -179,7 +179,7 @@ class PlayerModule(BasicUtilityModule):
         medias: tp.List[tp.Tuple[str, Media]] = []
         url_to_medias = {}
         for url in uris:
-            new_medias = await self._add_to_playlist_cb(url)
+            new_medias = await self.callbacks.add_to_playlist(url)
             medias += [(url, media) for media in new_medias]
             await status_message.edit_text(
                 self._build_reply_text(
