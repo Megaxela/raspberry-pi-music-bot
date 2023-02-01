@@ -45,8 +45,11 @@ class Playlist:
         if not submedia:
             return [media]
 
+        return submedia
+
+        # note: disabling recursive parsing to support huge playlists.
         # Concat all lists with media
-        return sum(
-            [(await self._unwrap_media(m, level + 1)) for m in submedia],
-            list(),
-        )
+        # return sum(
+        #     [(await self._unwrap_media(m, level + 1)) for m in submedia],
+        #     list(),
+        # )
