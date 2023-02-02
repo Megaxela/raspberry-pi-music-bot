@@ -76,8 +76,8 @@ class Player:
         await media.load_metadata()
 
         # If there is subitems - add them.
-        if media.subitems:
-            media = media.subitems[0]
+        if await media.subitems:
+            media = (await media.subitems)[0]
 
         # Set current media
         self._current_media = media
