@@ -48,9 +48,6 @@ class Player:
         ev: vlc.EventManager = self._player.event_manager()
         await wrap_vlc_event(ev, vlc.EventType.MediaPlayerEndReached)
 
-        while self._player.get_media() != None:
-            await wrap_vlc_event(ev, vlc.EventType.MediaPlayerEndReached)
-
     async def pause(self):
         if self.state != PlayerState.Playing:
             return
@@ -77,6 +74,10 @@ class Player:
 
         # Attempting to load metadata before play
         await media.load_metadata()
+
+        # If there is subitems - add them.
+        if media.subitems:
+            media = media.subitems[0]
 
         # Set current media
         self._current_media = media
