@@ -41,8 +41,11 @@ class Media:
 
     @async_property
     async def media_title(self) -> tp.Optional[str]:
-        await self.load_metadata()
-        return self._media.get_meta(vlc.Meta.Title)
+        title = self._media.get_meta(vlc.Meta.Title)
+        if title is None:
+            await self.load_metadata()
+            title = self._media.get_meta(vlc.Meta.Title)
+        return title
 
     @async_property
     async def subitems(self) -> vlc.MediaList:
