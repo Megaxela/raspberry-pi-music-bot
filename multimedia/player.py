@@ -48,6 +48,9 @@ class Player:
         ev: vlc.EventManager = self._player.event_manager()
         await wrap_vlc_event(ev, vlc.EventType.MediaPlayerEndReached)
 
+        while self._player.get_media() != None:
+            await wrap_vlc_event(ev, vlc.EventType.MediaPlayerEndReached)
+
     async def pause(self):
         if self.state != PlayerState.Playing:
             return

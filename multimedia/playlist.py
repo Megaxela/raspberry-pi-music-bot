@@ -21,6 +21,10 @@ class Playlist:
 
         self._queue += flatten_medias
 
+        logger.info(
+            "mri '%s' adds folowing medias: %s", mri, [m.mrl for m in flatten_medias]
+        )
+
         return flatten_medias
 
     def clear(self):
