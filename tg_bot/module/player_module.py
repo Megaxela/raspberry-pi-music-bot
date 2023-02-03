@@ -280,14 +280,14 @@ class PlayerModule(BasicUtilityModule):
         if state == PlayerState.Playing:
             current_media = self.callbacks.current_media()
             return MESSAGE_PLAYER_PLAYING.format(
-                f'{await current_media.media_artist} - {await current_media.media_title}',
+                f"{await current_media.media_artist} - {await current_media.media_title}",
                 seconds_to_time(self.callbacks.get_cursor()),
                 seconds_to_time(self.callbacks.get_length()),
             )
         elif state == PlayerState.Paused:
             current_media = self.callbacks.current_media()
             return MESSAGE_PLAYER_PAUSED.format(
-                f'{await current_media.media_artist} - {await current_media.media_title}'
+                f"{await current_media.media_artist} - {await current_media.media_title}",
                 seconds_to_time(self.callbacks.get_cursor()),
                 seconds_to_time(self.callbacks.get_length()),
             )
