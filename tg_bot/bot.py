@@ -80,9 +80,7 @@ class TelegramBot:
     async def notify_currently_playing(self, media: Media):
         await self._notify(
             MESSAGE_NOTIFY_AUTOPLAY.format(
-                shorten_to_message(
-                    f"{await media.media_artist} - {await media.media_title}"
-                )
+                f"{await media.media_artist} - {await media.media_title}"
             )
         )
 

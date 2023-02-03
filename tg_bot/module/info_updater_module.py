@@ -120,7 +120,7 @@ class InfoUpdaterModule(BasicUtilityModule):
 
         titles = "\n".join(
             [
-                f"\\- `{escape_markdown(shorten_to_message(await media.media_artist + ' - ' + await media.media_title), 2)}`"
+                f"\\- `{escape_markdown(shorten_to_message(str(await media.media_title)), 2)}`"
                 for media in medias[:max_medias_per_info]
             ]
         )
