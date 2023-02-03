@@ -15,6 +15,7 @@ from telegram.constants import ParseMode
 from telegram._utils.defaultvalue import DEFAULT_NONE
 from telegram.ext import Application
 
+from utils import shorten_to_message
 
 MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
 
@@ -77,7 +78,13 @@ class TelegramBot:
         await self._application.start()
 
     async def notify_currently_playing(self, media: Media):
-        await self._notify(MESSAGE_NOTIFY_AUTOPLAY.format(await media.media_title))
+        await self._notify(
+            MESSAGE_NOTIFY_AUTOPLAY.format(
+                shorten_to_message(
+                    f"{await media.media_artist} - {await media.media_title}"
+                )
+            )
+        )
 
     async def _notify(self, text):
         for chat_id in self._application.chat_data:

@@ -3,3 +3,4 @@ async-property
 python-telegram-bot>=20.0a0
 aiosqlite
 netifaces
+pdb-attach

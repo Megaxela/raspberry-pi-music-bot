@@ -188,7 +188,7 @@ class PlayerModule(BasicUtilityModule):
                         len(medias),
                         "\n".join(
                             [
-                                f"\\- [{escape_markdown(shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
+                                f"\\- [{escape_markdown(shorten_to_message(f'{await media.media_artist} - {await media.media_title}'), 2)}]({escape_markdown(url, 2)})"
                                 for url in uris
                                 if url in url_to_medias
                                 for media in url_to_medias[url]
@@ -212,7 +212,7 @@ class PlayerModule(BasicUtilityModule):
                     len(medias),
                     "\n".join(
                         [
-                            f"\\- [{escape_markdown(shorten_to_message(await media.media_title), 2)}]({escape_markdown(url)})"
+                            f"\\- [{escape_markdown(shorten_to_message(f'{await media.media_artist} - {await media.media_title}'), 2)}]({escape_markdown(url)})"
                             for url, media in medias
                         ]
                     ),
@@ -278,14 +278,16 @@ class PlayerModule(BasicUtilityModule):
     async def status_fmt(self):
         state = self.callbacks.current_player_state()
         if state == PlayerState.Playing:
+            current_media = self.callbacks.current_media()
             return MESSAGE_PLAYER_PLAYING.format(
-                await self.callbacks.current_media().media_title,
+                f'{await current_media.media_artist} - {await current_media.media_title}',
                 seconds_to_time(self.callbacks.get_cursor()),
                 seconds_to_time(self.callbacks.get_length()),
             )
         elif state == PlayerState.Paused:
+            current_media = self.callbacks.current_media()
             return MESSAGE_PLAYER_PAUSED.format(
-                await self.callbacks.current_media().media_title,
+                f'{await current_media.media_artist} - {await current_media.media_title}'
                 seconds_to_time(self.callbacks.get_cursor()),
                 seconds_to_time(self.callbacks.get_length()),
             )
@@ -321,7 +323,7 @@ class PlayerModule(BasicUtilityModule):
                         len(medias),
                         "\n".join(
                             [
-                                f"\\- [{escape_markdown(shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
+                                f"\\- [{escape_markdown(shorten_to_message('{await media.media_artist} - {await media.media_title}'), 2)}]({escape_markdown(url, 2)})"
                                 for url in uris
                                 if url in url_to_medias
                                 for media in url_to_medias[url]
@@ -345,7 +347,7 @@ class PlayerModule(BasicUtilityModule):
                     len(medias),
                     "\n".join(
                         [
-                            f"\\- [{escape_markdown(shorten_to_message(await media.media_title), 2)}]({escape_markdown(url, 2)})"
+                            f"\\- [{escape_markdown(shorten_to_message(f'{await media.media_artist} - {await media.media_title}'), 2)}]({escape_markdown(url, 2)})"
                             for url, media in medias
                         ]
                     ),

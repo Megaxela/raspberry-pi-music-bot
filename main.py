@@ -5,12 +5,15 @@ import os
 import ctypes
 
 import vlc
+import pdb_attach
 
 from multimedia.media import Media
 from multimedia.player import Player
 from multimedia.playlist import Playlist
 
 from service import Service
+
+pdb_attach.listen(50000)
 
 logging.basicConfig(
     level=logging.INFO,

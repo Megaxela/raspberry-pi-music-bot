@@ -48,6 +48,15 @@ class Media:
         return title
 
     @async_property
+    async def media_artist(self) -> tp.Optional[str]:
+        artist = self._media.get_meta(vlc.Meta.Artist)
+        if artist is None:
+            await self.load_metadata()
+            artist = self._media.get_meta(vlc.Meta.Artist)
+
+        return artist
+
+    @async_property
     async def subitems(self) -> vlc.MediaList:
         await self.load_metadata()
 
