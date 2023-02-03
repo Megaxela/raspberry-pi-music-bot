@@ -15,7 +15,7 @@ from telegram.constants import ParseMode
 from telegram._utils.defaultvalue import DEFAULT_NONE
 from telegram.ext import Application
 
-from utils import shorten_to_message
+from tg_bot.utils import shorten_to_message
 
 MESSAGE_NOTIFY_AUTOPLAY = "🔔 Сейчас будет играть: `{}`"
 
